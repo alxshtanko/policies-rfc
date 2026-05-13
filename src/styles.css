@@ -1,0 +1,125 @@
+:root {
+  --bg: #181818;
+  --bg-chrome: #141414;
+  --bg-elevated: #1d1d1d;
+  --text: rgba(228, 228, 228, 0.92);
+  --text-secondary: rgba(228, 228, 228, 0.55);
+  --text-tertiary: rgba(228, 228, 228, 0.37);
+  --text-quaternary: rgba(228, 228, 228, 0.26);
+  --stroke: rgba(228, 228, 228, 0.2);
+  --stroke-subtle: rgba(228, 228, 228, 0.12);
+  --fill-tertiary: rgba(228, 228, 228, 0.07);
+  --accent: #599ce7;
+  --accent-text: #181c22;
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  --font-mono:
+    'SF Mono', 'JetBrains Mono', 'Geist Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #fcfcfc;
+    --bg-chrome: #f8f8f8;
+    --bg-elevated: #fcfcfc;
+    --text: rgba(20, 20, 20, 0.94);
+    --text-secondary: rgba(20, 20, 20, 0.74);
+    --text-tertiary: rgba(20, 20, 20, 0.54);
+    --text-quaternary: rgba(20, 20, 20, 0.36);
+    --stroke: rgba(20, 20, 20, 0.2);
+    --stroke-subtle: rgba(20, 20, 20, 0.12);
+    --fill-tertiary: rgba(20, 20, 20, 0.07);
+    --accent: #3685bf;
+    --accent-text: #fcfcfc;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--fill-tertiary);
+}
+
+pre {
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+.canvas-page {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.canvas-app-shell {
+  min-height: 100vh;
+}
+
+.canvas-topnav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--stroke-subtle);
+}
+
+.canvas-topnav-brand {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.canvas-topnav a {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.canvas-topnav a.active {
+  color: var(--text);
+}
