@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { FloatingReview } from './components/FloatingReview';
 import Home from './pages/Home';
 import IntegrationDesign from './pages/IntegrationDesign';
 import PolicyServiceDataModel from './pages/PolicyServiceDataModel';
@@ -42,6 +43,7 @@ export function App() {
         {route === '#/integration' && <IntegrationDesign />}
         {route === '#/data-model' && <PolicyServiceDataModel />}
       </main>
+      <FloatingReview />
     </div>
   );
 }
