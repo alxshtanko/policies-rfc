@@ -1,4 +1,4 @@
-﻿# Policies Infrastructure â€” Architecture Decision Records
+# Policies Infrastructure — Architecture Decision Records
 
 This folder contains the design documentation for the Policy Management framework.
 
@@ -8,7 +8,7 @@ This folder contains the design documentation for the Policy Management framewor
 
 | ADR | Title | Summary |
 |-----|-------|---------|
-| [ADR-001](ADR-001-sdk-policy-framework.md) | SDK / Library Design | `PolicyFramework` (.NET) and `policy-client` (TypeScript) â€” local evaluation, caching, override registration, audit emission |
+| [ADR-001](ADR-001-sdk-policy-framework.md) | SDK / Library Design | `PolicyFramework` (.NET) and `policy-client` (TypeScript) — local evaluation, caching, override registration, audit emission |
 | [ADR-002](ADR-002-override-exception-flows.md) | Override and Exception Flows | Tenant overrides, app overrides, user opt-in/opt-out, emergency operator exceptions with mandatory expiry |
 | [ADR-003](ADR-003-policy-data-storage.md) | Policy Data Storage | Centralized PostgreSQL in PolicyService, app-local cache pattern, schema evolution and versioning strategy |
 | [ADR-004](ADR-004-audit-and-dashboard.md) | Audit and Dashboard | Event taxonomy, ServiceBus + Kafka pipeline, Elasticsearch storage, cross-app aggregation, sampling, dashboards, alerting |
@@ -26,14 +26,14 @@ This folder contains the design documentation for the Policy Management framewor
 
 ## Key Design Decisions
 
-- **Four-level hierarchy** (L0 global â†’ L1 tenant â†’ L2 app â†’ L3 user). Each level can only tighten, never loosen, the level above â€” unless the definition explicitly permits relaxation.
+- **Four-level hierarchy** (L0 global → L1 tenant → L2 app → L3 user). Each level can only tighten, never loosen, the level above — unless the definition explicitly permits relaxation.
 - **Local evaluation**: the SDK caches policy instances and evaluates the hierarchy in-process, eliminating per-request latency on the hot path. Cache invalidation is event-driven via **Azure ServiceBus** with broker-side SQL filters per (tenant, policy key).
 - **Everything is audited**: write-path events (100% sampled) flow through **ServiceBus** to the audit pipeline; high-volume evaluation events (default 1% sampled) flow through **Kafka** for throughput and replay. Both streams land in the same Elasticsearch audit index. No app needs to instrument audit logging independently.
 - **Tech stack**: .NET 10, ASP.NET Core 10, PostgreSQL 15, Flyway, Azure ServiceBus (low-volume change events), Apache Kafka (high-volume audit/eval events).
 - **Override flows are explicit and bounded**: all exceptions require a reason; emergency overrides require a ticket reference and a mandatory expiry date.
 - **Schema is append-only**: policy definitions are never mutated once active. Breaking changes produce a new version; apps register migrators to translate old stored values at read time.
 
-## MFA Enforcement Policy â€” Canonical Example
+## MFA Enforcement Policy — Canonical Example
 
 ```
 PolicyDefinition key: policy.mfa.enforcement_stage
@@ -77,13 +77,13 @@ This matrix maps each PRD critical requirement to the ADR that delivers it.
 | Group exceptions                                                    | 008 + 010 |
 | Environment / routing context (Go vs Next vs Enterprise Hub)        | 008  |
 | Multi-level opt-out (org / role / group / app)                      | 008  |
-| Exemption workflow (request â†’ review â†’ approve)                     | 010  |
+| Exemption workflow (request → review → approve)                     | 010  |
 | Context-aware evaluation (role, auth method, env, location, risk)   | 008  |
 | Slow-roll SSO by role                                               | 008  |
 | Required vs allowed vs disabled MFA factors                         | 009  |
 | MFA factor catalog (SMS, TOTP, passkeys, future)                    | 009  |
 | Multi-provider SSO (Entra, Google, Okta)                            | 009  |
-| SSO â†” account-linking dependency                                    | 009  |
+| SSO ↔ account-linking dependency                                    | 009  |
 | Step-up MFA for sensitive actions                                   | 009  |
 | Session-revocation cascade on password rotation                     | 009  |
 | Restrict access to apps / environments                              | 008 + 009 (`access.allowed_environments`) |

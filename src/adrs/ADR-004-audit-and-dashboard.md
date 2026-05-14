@@ -1,4 +1,4 @@
-﻿# ADR-004: Policy Audit and Dashboard
+# ADR-004: Policy Audit and Dashboard
 
 **Status**: Proposed  
 **Date**: 2026-05-11  
@@ -11,7 +11,7 @@
 
 Policy data is inherently distributed:
 
-- PolicyService owns L0â€“L3 instance changes.
+- PolicyService owns L0–L3 instance changes.
 - Each consuming app (`mfa-service`, `host-api`, `identity-service`, monolith, etc.) evaluates policies locally and may have code-registered L2 overrides that never touch PolicyService.
 - User opt-outs happen via API but their effect is evaluated per-app.
 
@@ -31,10 +31,10 @@ The audit and dashboard system must aggregate data from **distributed app-level 
 
 Use an **event-driven audit pipeline** that intentionally splits across two buses by event class:
 
-- **Write-path events** (low volume, 100% sampled, need broker-side filtering for cache invalidation) â†’ **Azure ServiceBus** topic `policy-changes`, produced by PolicyService.
-- **Evaluation/audit events** (high volume, fan-in to one consumer, benefit from replay) â†’ **Kafka** topic `policy-audit-events`, produced by every SDK client and partitioned by `tenantId`.
+- **Write-path events** (low volume, 100% sampled, need broker-side filtering for cache invalidation) → **Azure ServiceBus** topic `policy-changes`, produced by PolicyService.
+- **Evaluation/audit events** (high volume, fan-in to one consumer, benefit from replay) → **Kafka** topic `policy-audit-events`, produced by every SDK client and partitioned by `tenantId`.
 
-A dedicated **Audit Sink Service** consumes from both â€” a ServiceBus subscription on `policy-changes` and a Kafka consumer group on `policy-audit-events` â€” and indexes everything into Elasticsearch. A **Dashboard API** queries Elasticsearch to serve the Central Policy Admin UI.
+A dedicated **Audit Sink Service** consumes from both — a ServiceBus subscription on `policy-changes` and a Kafka consumer group on `policy-audit-events` — and indexes everything into Elasticsearch. A **Dashboard API** queries Elasticsearch to serve the Central Policy Admin UI.
 
 ---
 
@@ -78,7 +78,7 @@ All events share a common envelope:
 | `PolicyCacheMiss` | SDK fetched from PolicyService on cache miss | 100% (low volume) |
 | `PolicyCacheInvalidated` | ServiceBus change event received | 100% |
 
-**Sampling rationale for `PolicyEvaluated`**: at scale, evaluations happen on every authenticated request. At 50k req/s across all apps, 100% sampling would generate ~4B events/day. 1% sampling (configurable per app via `AuditSampleRate` in SDK options) yields ~40M events/day â€” sufficient for trend analysis. For specific investigations, the sample rate can be raised temporarily per-tenant or per-policy via PolicyService config.
+**Sampling rationale for `PolicyEvaluated`**: at scale, evaluations happen on every authenticated request. At 50k req/s across all apps, 100% sampling would generate ~4B events/day. 1% sampling (configurable per app via `AuditSampleRate` in SDK options) yields ~40M events/day — sufficient for trend analysis. For specific investigations, the sample rate can be raised temporarily per-tenant or per-policy via PolicyService config.
 
 ---
 
@@ -145,13 +145,13 @@ All events share a common envelope:
 ## Bus Topology
 
 ```
-PolicyService  â”€â”€â–¶  Azure ServiceBus  Topic: policy-changes
+PolicyService  ──▶  Azure ServiceBus  Topic: policy-changes
                     Subscriptions:
                       audit-sink                 (all write-path events, no filter)
                       sdk-cache-invalidation-*   (PolicyInstanceChanged only,
                                                   SQL filter per (tenantId, policyKey))
 
-SDK (each app) â”€â”€â–¶  Kafka  Topic: policy-audit-events
+SDK (each app) ──▶  Kafka  Topic: policy-audit-events
                     (partitioned by tenantId, ~24 partitions)
                     Consumer group:
                       audit-sink                 (parallel consumers, replay supported)
@@ -183,7 +183,7 @@ Startup:
 
 Per-batch (every 5s or 500 events):
   1. Deserialize events
-  2. Enrich: resolve tenant name from cache (tenantId â†’ name lookup, TTL 10 min)
+  2. Enrich: resolve tenant name from cache (tenantId → name lookup, TTL 10 min)
   3. Bulk-index to Elasticsearch:
        policy-changes-YYYY.MM    (write-path events)
        policy-evals-YYYY.MM      (evaluation events, sampled)
@@ -308,35 +308,35 @@ A REST API (`ium-policy-dashboard-api`) backed by Elasticsearch. Consumed by the
 
 ```
 GET  /dashboard/policies/{key}/adoption
-     â†’ Distribution of current L1 values across all tenants
-     â†’ Response: { values: { "AdminsOnly": 120, "EmployeesOptOut": 450, ... }, total: 1200 }
+     → Distribution of current L1 values across all tenants
+     → Response: { values: { "AdminsOnly": 120, "EmployeesOptOut": 450, ... }, total: 1200 }
 
 GET  /dashboard/policies/{key}/opt-outs
-     â†’ Count and trend of L3 opt-outs over time
-     â†’ Query params: tenantId?, appId?, from, to
+     → Count and trend of L3 opt-outs over time
+     → Query params: tenantId?, appId?, from, to
 
 GET  /dashboard/tenants/{tenantId}/policy-summary
-     â†’ All L1 overrides for a tenant (current active instances)
-     â†’ All active L3 instances (user opt-outs) for the tenant
+     → All L1 overrides for a tenant (current active instances)
+     → All active L3 instances (user opt-outs) for the tenant
 
 GET  /dashboard/audit-log
-     â†’ Paginated change log: who changed what, when
-     â†’ Query params: policyKey?, tenantId?, level?, from, to, changedBy?
+     → Paginated change log: who changed what, when
+     → Query params: policyKey?, tenantId?, level?, from, to, changedBy?
 
 GET  /dashboard/exceptions/active
-     â†’ All currently active emergency exceptions (non-null ticketRef, not expired)
+     → All currently active emergency exceptions (non-null ticketRef, not expired)
 
 GET  /dashboard/exceptions/expired-soon
-     â†’ Exceptions expiring in the next 7 days (alert surface)
+     → Exceptions expiring in the next 7 days (alert surface)
 
 GET  /dashboard/metrics/cache-miss-rate
-     â†’ Cache miss rate by app and policy key (from PolicyCacheMiss events)
+     → Cache miss rate by app and policy key (from PolicyCacheMiss events)
 ```
 
 ### Authorization
 
-- `policy:read` scope â†’ all read endpoints
-- `policy:admin` scope â†’ includes `/exceptions/*` write operations (see ADR-002)
+- `policy:read` scope → all read endpoints
+- `policy:admin` scope → includes `/exceptions/*` write operations (see ADR-002)
 - Tenant-scoped access: tenant admins can only query their own `tenantId`; ST ops see all tenants
 
 ---
@@ -348,7 +348,7 @@ The Central Policy Admin UI consumes the Dashboard API and renders:
 | View | Data Source | Key Metrics |
 |------|-------------|-------------|
 | **Policy Adoption** | `/adoption` | Donut chart: % of tenants per stage |
-| **Tenant Policy Matrix** | `/policy-summary` per tenant | Grid: tenant Ã— policy â†’ current value |
+| **Tenant Policy Matrix** | `/policy-summary` per tenant | Grid: tenant × policy → current value |
 | **Change Audit Log** | `/audit-log` | Searchable table with filters |
 | **Opt-Out Trends** | `/opt-outs` | Time-series chart: opt-outs per day |
 | **Active Exceptions** | `/exceptions/active` | List with expiry countdown |
@@ -366,7 +366,7 @@ The Dashboard API exposes a Prometheus-compatible `/metrics` endpoint. Grafana a
 | Exception about to expire | `expires_at < now + 24h` AND `status = Active` | Warning |
 | Exception expired without revert | Policy still at exception value 1h after expiry | Critical |
 | High DLQ depth | Audit Sink DLQ > 100 | Warning |
-| Unusual opt-out spike | Opt-outs > 10Ã— rolling 7d average | Warning |
+| Unusual opt-out spike | Opt-outs > 10× rolling 7d average | Warning |
 | PolicyService write latency | p95 > 500ms | Warning |
 
 ---
@@ -380,7 +380,7 @@ The Dashboard API exposes a Prometheus-compatible `/metrics` endpoint. Grafana a
 - Sampling at 1% for evaluation events keeps Elasticsearch costs proportional while preserving trend visibility.
 
 **Negative / Risks**
-- Eventual consistency: the audit trail may lag real-time by a few seconds (ServiceBus delivery + Kafka producer flush + Sink batch interval). Not suitable for real-time enforcement decisions â€” use PolicyService directly for those.
+- Eventual consistency: the audit trail may lag real-time by a few seconds (ServiceBus delivery + Kafka producer flush + Sink batch interval). Not suitable for real-time enforcement decisions — use PolicyService directly for those.
 - Operating two buses means two sets of monitoring, IaC, and incident response. Justified by the workload split, but worth revisiting if Kafka coverage in the platform expands enough to make ServiceBus the outlier.
 - Adoption query (current stage per tenant) requires a post-processing step in the Dashboard API because Elasticsearch aggregations return the history, not a materialized current view. At >10k tenants, consider materializing a `tenant_policy_state` table in the Dashboard API's own DB.
 - `cardinality` aggregations on `userId` are approximate in Elasticsearch (HyperLogLog). Acceptable for trend analysis; not acceptable for precise unique-user counts. Precise counts require a dedicated counter in PolicyService's PostgreSQL.

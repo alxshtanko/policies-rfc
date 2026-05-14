@@ -1,4 +1,4 @@
-﻿# ADR-005: PolicyService API Surface
+# ADR-005: PolicyService API Surface
 
 **Status**: Proposed  
 **Date**: 2026-05-11  
@@ -11,9 +11,9 @@
 
 `PolicyService` is the authoritative backend for all policy definitions and instances. Its API must serve three distinct consumer types:
 
-1. **SDK clients** (internal services and MFEs) â€” read-heavy: fetch instances for cache population, submit L3 opt-out/opt-in, receive change notifications.
-2. **Management UIs** (Central Policy Admin, app-embedded MFEs) â€” write-heavy for L1/L2 overrides, read for display.
-3. **ST Ops tooling** â€” emergency exceptions, definition management, administrative queries.
+1. **SDK clients** (internal services and MFEs) — read-heavy: fetch instances for cache population, submit L3 opt-out/opt-in, receive change notifications.
+2. **Management UIs** (Central Policy Admin, app-embedded MFEs) — write-heavy for L1/L2 overrides, read for display.
+3. **ST Ops tooling** — emergency exceptions, definition management, administrative queries.
 
 ---
 
@@ -50,27 +50,27 @@ Versioning is in the URL path. `v1` is the initial release. Future incompatible 
 
 ```
 GET    /definitions
-       â†’ List all active definitions
-       â†’ Query: ?key=&valueType=&page=&pageSize=
-       â†’ Scope required: policy:read
+       → List all active definitions
+       → Query: ?key=&valueType=&page=&pageSize=
+       → Scope required: policy:read
 
 GET    /definitions/{key}
-       â†’ Get the active definition for a policy key
-       â†’ Returns definition with current version, allowed values, overridability
+       → Get the active definition for a policy key
+       → Returns definition with current version, allowed values, overridability
 
 GET    /definitions/{key}/versions
-       â†’ Full version history for a policy key
-       â†’ Scope required: policy:admin
+       → Full version history for a policy key
+       → Scope required: policy:admin
 
 POST   /definitions
-       â†’ Register a new policy definition or a new version of an existing key
-       â†’ Scope required: policy:definitions:write
-       â†’ Body: PolicyDefinitionCreateRequest
+       → Register a new policy definition or a new version of an existing key
+       → Scope required: policy:definitions:write
+       → Body: PolicyDefinitionCreateRequest
 
 PUT    /definitions/{key}
-       â†’ Non-breaking update (e.g. add an allowed value)
-       â†’ Scope required: policy:definitions:write
-       â†’ Body: PolicyDefinitionPatchRequest
+       → Non-breaking update (e.g. add an allowed value)
+       → Scope required: policy:definitions:write
+       → Body: PolicyDefinitionPatchRequest
 ```
 
 **`PolicyDefinitionCreateRequest`**:
@@ -99,30 +99,30 @@ PUT    /definitions/{key}
 
 ---
 
-### Policy Instances â€” Tenant Level (L1)
+### Policy Instances — Tenant Level (L1)
 
 ```
 GET    /tenants/{tenantId}/policies
-       â†’ All active L1 instances for a tenant
-       â†’ Scope required: policy:read (tenantId must match token claim)
+       → All active L1 instances for a tenant
+       → Scope required: policy:read (tenantId must match token claim)
 
 GET    /tenants/{tenantId}/policies/{key}
-       â†’ Single L1 instance (or 404 if no override â€” use L0 default)
-       â†’ Scope required: policy:read
+       → Single L1 instance (or 404 if no override — use L0 default)
+       → Scope required: policy:read
 
 PUT    /tenants/{tenantId}/policies/{key}
-       â†’ Create or replace the L1 override for a tenant
-       â†’ Scope required: policy:write:l1
-       â†’ Body: PolicyInstanceWriteRequest
-       â†’ Returns: PolicyInstance (with instanceId)
+       → Create or replace the L1 override for a tenant
+       → Scope required: policy:write:l1
+       → Body: PolicyInstanceWriteRequest
+       → Returns: PolicyInstance (with instanceId)
 
 DELETE /tenants/{tenantId}/policies/{key}
-       â†’ Remove the L1 override (tenant reverts to L0 default)
-       â†’ Scope required: policy:write:l1
+       → Remove the L1 override (tenant reverts to L0 default)
+       → Scope required: policy:write:l1
 
 GET    /tenants/{tenantId}/policies/{key}/history
-       â†’ Paginated history of all instances (Active + Revoked + Expired)
-       â†’ Scope required: policy:read
+       → Paginated history of all instances (Active + Revoked + Expired)
+       → Scope required: policy:read
 ```
 
 **`PolicyInstanceWriteRequest`**:
@@ -156,52 +156,52 @@ GET    /tenants/{tenantId}/policies/{key}/history
 
 ---
 
-### Policy Instances â€” Application Level (L2)
+### Policy Instances — Application Level (L2)
 
 ```
 GET    /apps/{appId}/tenants/{tenantId}/policies
-       â†’ All active L2 instances for an app+tenant
-       â†’ Scope required: policy:read
+       → All active L2 instances for an app+tenant
+       → Scope required: policy:read
 
 GET    /apps/{appId}/tenants/{tenantId}/policies/{key}
-       â†’ Single L2 DB instance (code-registered overrides not returned here)
+       → Single L2 DB instance (code-registered overrides not returned here)
 
 PUT    /apps/{appId}/tenants/{tenantId}/policies/{key}
-       â†’ Create or replace an L2 override
-       â†’ Scope required: policy:write:l2 (appId must match token sub claim)
-       â†’ Body: PolicyInstanceWriteRequest
+       → Create or replace an L2 override
+       → Scope required: policy:write:l2 (appId must match token sub claim)
+       → Body: PolicyInstanceWriteRequest
 
 DELETE /apps/{appId}/tenants/{tenantId}/policies/{key}
-       â†’ Remove L2 DB override (code-registered overrides unaffected)
-       â†’ Scope required: policy:write:l2
+       → Remove L2 DB override (code-registered overrides unaffected)
+       → Scope required: policy:write:l2
 ```
 
 ---
 
-### Policy Instances â€” User Level (L3) â€” Opt-Out/Opt-In
+### Policy Instances — User Level (L3) — Opt-Out/Opt-In
 
 ```
 GET    /me/policies
-       â†’ All active L3 instances for the current user
-       â†’ Scope required: policy:read (user identity from token)
+       → All active L3 instances for the current user
+       → Scope required: policy:read (user identity from token)
 
 GET    /me/policies/{key}
-       â†’ Current L3 instance for this user and policy
+       → Current L3 instance for this user and policy
 
 POST   /me/policies/{key}/opt-out
-       â†’ Request opt-out (creates L3 instance if eligible)
-       â†’ Scope required: policy:write:l3
-       â†’ Body: { "reason": "..." }
-       â†’ Returns: PolicyInstance or 403 (not eligible)
+       → Request opt-out (creates L3 instance if eligible)
+       → Scope required: policy:write:l3
+       → Body: { "reason": "..." }
+       → Returns: PolicyInstance or 403 (not eligible)
 
 DELETE /me/policies/{key}/opt-out
-       â†’ Cancel opt-out (revokes L3 instance)
-       â†’ Scope required: policy:write:l3
+       → Cancel opt-out (revokes L3 instance)
+       → Scope required: policy:write:l3
 
 POST   /me/policies/{key}/opt-in
-       â†’ User chooses to be MORE restricted than L2 default
-       â†’ Body: { "value": "AllUsersOptOut" }
-       â†’ Returns: PolicyInstance
+       → User chooses to be MORE restricted than L2 default
+       → Body: { "value": "AllUsersOptOut" }
+       → Returns: PolicyInstance
 ```
 
 ---
@@ -210,13 +210,13 @@ POST   /me/policies/{key}/opt-in
 
 ```
 POST   /evaluate
-       â†’ Resolve the effective policy value for a given context
-       â†’ Used by SDK on cache miss; can also be called directly for real-time checks
-       â†’ Scope required: policy:read
+       → Resolve the effective policy value for a given context
+       → Used by SDK on cache miss; can also be called directly for real-time checks
+       → Scope required: policy:read
 
 POST   /evaluate/batch
-       â†’ Resolve multiple policies for the same context in one round-trip
-       â†’ Returns map of policyKey â†’ PolicyResult
+       → Resolve multiple policies for the same context in one round-trip
+       → Returns map of policyKey → PolicyResult
 ```
 
 **`/evaluate` request**:
@@ -251,17 +251,17 @@ POST   /evaluate/batch
 
 ```
 POST   /admin/exceptions
-       â†’ Create a time-bounded exception at any level
-       â†’ Scope required: policy:admin
-       â†’ Body: PolicyExceptionRequest
+       → Create a time-bounded exception at any level
+       → Scope required: policy:admin
+       → Body: PolicyExceptionRequest
 
 GET    /admin/exceptions
-       â†’ List all active exceptions
-       â†’ Query: ?policyKey=&tenantId=&expiresWithin=7d
+       → List all active exceptions
+       → Query: ?policyKey=&tenantId=&expiresWithin=7d
 
 DELETE /admin/exceptions/{exceptionId}
-       â†’ Revoke an exception before it expires
-       â†’ Scope required: policy:admin
+       → Revoke an exception before it expires
+       → Scope required: policy:admin
 ```
 
 **`PolicyExceptionRequest`**:
@@ -273,7 +273,7 @@ DELETE /admin/exceptions/{exceptionId}
   "userId":      null,
   "appId":       null,
   "value":       "Disabled",
-  "reason":      "Tenant migration â€” MFA temporarily suspended",
+  "reason":      "Tenant migration — MFA temporarily suspended",
   "expiresAt":   "2026-05-18T23:59:59Z",
   "approvedBy":  "ops-user@example.com",
   "ticketRef":   "OPS-4521"
@@ -286,9 +286,9 @@ DELETE /admin/exceptions/{exceptionId}
 
 ```
 POST   /sdk/instances/bulk
-       â†’ Fetch all instances relevant to an SDK client in one call
-       â†’ Used on startup and after cache invalidation
-       â†’ Scope required: policy:read
+       → Fetch all instances relevant to an SDK client in one call
+       → Used on startup and after cache invalidation
+       → Scope required: policy:read
 
 Body:
 {
@@ -307,7 +307,7 @@ Response:
 }
 ```
 
-This single endpoint replaces N Ã— M individual GET calls during SDK startup.
+This single endpoint replaces N × M individual GET calls during SDK startup.
 
 ---
 
@@ -315,7 +315,7 @@ This single endpoint replaces N Ã— M individual GET calls during SDK startup.
 
 PolicyService and SDK clients publish to two distinct buses based on event class. See ADR-004 for the rationale.
 
-### Azure ServiceBus â€” Topic: `policy-changes`
+### Azure ServiceBus — Topic: `policy-changes`
 
 **Producer**: PolicyService, on every successful write.
 **Consumers**: Audit Sink (full stream) and every SDK instance (filtered).
@@ -338,7 +338,7 @@ Message body: the event JSON described in ADR-004.
 
 **Message size limit**: 256 KB. Change events are small (<2 KB) so no compression is required.
 
-### Kafka â€” Topic: `policy-audit-events`
+### Kafka — Topic: `policy-audit-events`
 
 **Producer**: every SDK instance (via the `IPolicyAuditEmitter` background channel).
 **Consumer**: Audit Sink consumer group only.
@@ -381,7 +381,7 @@ All errors follow the standard error envelope:
 |-----------|----------|
 | 400 | Invalid request body, unknown policyKey, value not in allowedValues |
 | 403 | Scope insufficient, tenantId mismatch, override not allowed by definition |
-| 404 | No active instance at requested level (not an error â€” callers use L0 default) |
+| 404 | No active instance at requested level (not an error — callers use L0 default) |
 | 409 | Concurrent modification detected (include ETag support for PUT operations) |
 | 422 | Business rule violation (e.g. L1 value looser than L0, opt-out not eligible) |
 
@@ -404,9 +404,9 @@ SDK bulk-fetch is preferred over repeated individual `GET /evaluate` calls to st
 ## Health and Observability
 
 ```
-GET /health/live     â†’ Liveness probe (always 200 if process is up)
-GET /health/ready    â†’ Readiness probe (checks DB, ServiceBus, and Kafka producer connectivity)
-GET /metrics         â†’ Prometheus-compatible metrics:
+GET /health/live     → Liveness probe (always 200 if process is up)
+GET /health/ready    → Readiness probe (checks DB, ServiceBus, and Kafka producer connectivity)
+GET /metrics         → Prometheus-compatible metrics:
                          policy_evaluations_total{policyKey, resolvedLevel}
                          policy_instance_writes_total{level, policyKey}
                          policy_cache_misses_total{appId, policyKey}

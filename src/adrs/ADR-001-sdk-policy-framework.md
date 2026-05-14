@@ -1,4 +1,4 @@
-﻿# ADR-001: Policy Framework SDK / Library Design
+# ADR-001: Policy Framework SDK / Library Design
 
 **Status**: Proposed  
 **Date**: 2026-05-11  
@@ -11,7 +11,7 @@
 
 The platform enforces access rules across a growing set of services and micro-frontends: the monolith (`app/`), `host-api`, `identity-service`, `mfa-service`, `token-service`, and MFE-capable applications. Today, policy enforcement is scattered:
 
-- `MfaEnforcementPolicy` is an integer enum rendered into `window.App.Features` at page load â€” no server-side enforcement, no hierarchy.
+- `MfaEnforcementPolicy` is an integer enum rendered into `window.App.Features` at page load — no server-side enforcement, no hierarchy.
 - `AuthenticationMethodPolicy` in `identity-service` is a 3-value integer with no documented semantics.
 - `InitCooldownPolicy` in `mfa-service` is a hard-coded business rule, not a configurable policy.
 
@@ -24,7 +24,7 @@ There is no shared contract, no SDK, and no consistent way for a new service or 
 Provide a first-party .NET library **`PolicyFramework`** and a corresponding TypeScript package **`policy-client`** for MFEs. These packages encapsulate:
 
 1. Fetching and caching policy instances from `PolicyService`
-2. Local policy evaluation against the L0 â†’ L1 â†’ L2 â†’ L3 hierarchy
+2. Local policy evaluation against the L0 → L1 → L2 → L3 hierarchy
 3. App-specific override registration
 4. Audit event emission
 
@@ -35,7 +35,7 @@ Provide a first-party .NET library **`PolicyFramework`** and a corresponding Typ
 
 ---
 
-## .NET SDK â€” `PolicyFramework`
+## .NET SDK — `PolicyFramework`
 
 ### Core Abstractions
 
@@ -65,7 +65,7 @@ public interface IPolicyEvaluator
         PolicyContext context,
         CancellationToken ct = default);
 
-    /// Batch resolution â€” single network round-trip when cache is cold.
+    /// Batch resolution — single network round-trip when cache is cold.
     Task<IReadOnlyDictionary<string, PolicyResult<object>>> EvaluateManyAsync(
         IEnumerable<string> policyKeys,
         PolicyContext       context,
@@ -136,7 +136,7 @@ services.AddPolicyFramework(opts =>
     opts.KafkaAuditEventsTopic   = config["Kafka:PolicyAuditEventsTopic"];    // audit / eval stream
 });
 
-// Register an L2 code override (optional â€” only for apps with stricter local rules)
+// Register an L2 code override (optional — only for apps with stricter local rules)
 services.AddPolicyOverride<MfaModuleEnforcementOverride>();
 ```
 
@@ -144,17 +144,17 @@ services.AddPolicyOverride<MfaModuleEnforcementOverride>();
 
 ```
 EvaluateAsync(policyKey, context):
-  1. instances â† cache.Get(policyKey, context.TenantId, context.AppId)
-       if miss â†’ fetch from PolicyService, populate cache
-  2. l0 â† instances.SingleOrDefault(i => i.Level == L0)
-  3. l1 â† instances.SingleOrDefault(i => i.Level == L1 && i.TenantId == context.TenantId)
-  4. l2 â† instances.SingleOrDefault(i => i.Level == L2 && i.AppId == context.AppId
+  1. instances ← cache.Get(policyKey, context.TenantId, context.AppId)
+       if miss → fetch from PolicyService, populate cache
+  2. l0 ← instances.SingleOrDefault(i => i.Level == L0)
+  3. l1 ← instances.SingleOrDefault(i => i.Level == L1 && i.TenantId == context.TenantId)
+  4. l2 ← instances.SingleOrDefault(i => i.Level == L2 && i.AppId == context.AppId
                                        && i.TenantId == context.TenantId)
-       if null â†’ check registered IPolicyOverrideProvider<T> for this app
-  5. l3 â† if definition.l3Allowed
-            â†’ fetch user instance (smaller TTL: 1 min, or real-time for opt-out)
-  6. resolved â† first non-null of [l3, l2, l1, l0] that satisfies definition constraints
-       (e.g. L2 cannot be looser than L1 â€” clamp if violated)
+       if null → check registered IPolicyOverrideProvider<T> for this app
+  5. l3 ← if definition.l3Allowed
+            → fetch user instance (smaller TTL: 1 min, or real-time for opt-out)
+  6. resolved ← first non-null of [l3, l2, l1, l0] that satisfies definition constraints
+       (e.g. L2 cannot be looser than L1 — clamp if violated)
   7. emit PolicyEvaluated audit event (async, fire-and-forget)
   8. return PolicyResult(resolved.Value, resolvedLevel, instanceId)
 ```
@@ -170,7 +170,7 @@ For ordered enums (e.g. MfaEnforcementStage):
 
 ### Cache Invalidation
 
-PolicyService publishes `PolicyInstanceChanged` events to the **Azure ServiceBus** topic `policy-changes`. The SDK subscribes using Azure ServiceBus topic subscriptions with SQL filter â€” chosen specifically for this use case because each SDK consumer only needs the slice of (tenant, policyKey) tuples that its cache currently holds:
+PolicyService publishes `PolicyInstanceChanged` events to the **Azure ServiceBus** topic `policy-changes`. The SDK subscribes using Azure ServiceBus topic subscriptions with SQL filter — chosen specifically for this use case because each SDK consumer only needs the slice of (tenant, policyKey) tuples that its cache currently holds:
 
 ```
 policyKey = 'policy.mfa.enforcement_stage' AND tenantId = '12345'
@@ -179,7 +179,7 @@ policyKey = 'policy.mfa.enforcement_stage' AND tenantId = '12345'
 On receipt, the SDK evicts the relevant cache entry. This bounds the staleness window even when `CacheTtl` is generous.
 
 ```csharp
-// Handled inside the framework â€” no app code needed
+// Handled inside the framework — no app code needed
 internal class PolicyChangedEventHandler : IHostedService
 {
     // Subscribes to ServiceBus on startup, evicts cache entries on message receipt
@@ -214,7 +214,7 @@ Events are batched (up to 100 per flush or 5-second interval) and published to t
 
 ---
 
-## TypeScript SDK â€” `policy-client`
+## TypeScript SDK — `policy-client`
 
 MFEs use this package to read and display policy state and to submit L3 opt-out/opt-in requests.
 
@@ -265,7 +265,7 @@ The hook uses `React.useSyncExternalStore` to react to `onChange` events without
 
 ## App Integration Patterns
 
-### Pattern 1 â€” Read-only enforcement (most services)
+### Pattern 1 — Read-only enforcement (most services)
 
 ```csharp
 public class TokenLoginHandler(IPolicyEvaluator policies)
@@ -284,7 +284,7 @@ public class TokenLoginHandler(IPolicyEvaluator policies)
 }
 ```
 
-### Pattern 2 â€” App-specific L2 override (stricter local rules)
+### Pattern 2 — App-specific L2 override (stricter local rules)
 
 ```csharp
 // mfa-service registers this to enforce a minimum stage of Stage3 in its own API
@@ -312,7 +312,7 @@ public class MfaModuleEnforcementOverride : IPolicyOverrideProvider<MfaEnforceme
 }
 ```
 
-### Pattern 3 â€” Frontend conditional rendering
+### Pattern 3 — Frontend conditional rendering
 
 ```tsx
 // Show opt-out toggle only when the policy permits it and the user is subject to enforcement
@@ -353,7 +353,7 @@ services.AddPolicyValueMigrator<MfaEnforcementStage, MfaEnforcementStageV1Migrat
 - Uniform policy contract across all .NET services and TypeScript MFEs.
 - Policy changes propagate within seconds via ServiceBus invalidation; no deploy required.
 - Local evaluation eliminates per-request latency on the hot path.
-- Audit trail is automatic â€” apps get it without extra code.
+- Audit trail is automatic — apps get it without extra code.
 
 **Negative / Risks**
 - First-time SDK adoption requires migration of `window.App.Features.MfaEnforcementPolicy` usage sites in the monolith (scoped to Phase 1).

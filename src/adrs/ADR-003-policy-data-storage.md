@@ -1,4 +1,4 @@
-﻿# ADR-003: Policy Data Storage and Schema Management
+# ADR-003: Policy Data Storage and Schema Management
 
 **Status**: Proposed  
 **Date**: 2026-05-11  
@@ -11,11 +11,11 @@
 
 The policy system introduces two new entity families:
 
-1. **PolicyDefinition** â€” the schema/contract for a policy (what values are allowed, who can override it, what the default is). This is owned and versioned centrally.
-2. **PolicyInstance** â€” a runtime value for a specific scope (L0 global, L1 tenant, L2 app, L3 user). These are written frequently (every tenant config change, every user opt-out).
+1. **PolicyDefinition** — the schema/contract for a policy (what values are allowed, who can override it, what the default is). This is owned and versioned centrally.
+2. **PolicyInstance** — a runtime value for a specific scope (L0 global, L1 tenant, L2 app, L3 user). These are written frequently (every tenant config change, every user opt-out).
 
 The storage decisions must answer:
-- Where are L0â€“L3 instances stored: **centrally in PolicyService**, or **app-local with sync**?
+- Where are L0–L3 instances stored: **centrally in PolicyService**, or **app-local with sync**?
 - How do we handle **schema evolution** when a policy definition changes incompatibly?
 - How do we support **future requirement changes** without full database migrations?
 
@@ -34,7 +34,7 @@ The storage decisions must answer:
 | L3 instances | PolicyService PostgreSQL | Cross-app consistency required: a user's opt-out must apply everywhere |
 | Audit events | Elasticsearch `policy-audit-*` | Append-only, searchable, decoupled from operational DB |
 
-**L2 split-brain concern**: Some applications (e.g. `mfa-service`) have policy logic baked into code via `IPolicyOverrideProvider<T>` (ADR-001). These code-registered L2 overrides are never written to the DB â€” they exist only at the app level and are visible in the audit trail via `PolicyEvaluated` events tagged `ResolvedLevel=L2-code`. For DB-backed L2 overrides (runtime-configurable), the app writes to PolicyService via the service account API.
+**L2 split-brain concern**: Some applications (e.g. `mfa-service`) have policy logic baked into code via `IPolicyOverrideProvider<T>` (ADR-001). These code-registered L2 overrides are never written to the DB — they exist only at the app level and are visible in the audit trail via `PolicyEvaluated` events tagged `ResolvedLevel=L2-code`. For DB-backed L2 overrides (runtime-configurable), the app writes to PolicyService via the service account API.
 
 ---
 
@@ -156,7 +156,7 @@ Applications that need their own local policy storage (for offline resilience or
 
 1. On startup, the SDK fetches all L2 instances for `(appId, tenantId)` from PolicyService and writes them to a local in-process cache (TTL 5 min).
 2. On `PolicyInstanceChanged` ServiceBus event, the cache is invalidated and re-fetched.
-3. For apps that want DB-level durability, the app may persist the L2 snapshot to its own schema table `policy_instance_cache(policy_key, tenant_id, value, fetched_at)`. This cache is never the source of truth â€” it is always refreshed from PolicyService.
+3. For apps that want DB-level durability, the app may persist the L2 snapshot to its own schema table `policy_instance_cache(policy_key, tenant_id, value, fetched_at)`. This cache is never the source of truth — it is always refreshed from PolicyService.
 
 There is **no bidirectional sync** of L2 data. Apps write to PolicyService via the service account API; they never write to the local cache directly.
 
@@ -241,7 +241,7 @@ Data deletion must go through the standard data-retention pipeline, not ad hoc S
 
 ## Future Schema Extensibility
 
-The `policy_instances` table uses `value TEXT` (not a typed column) and `JSONB` for `allowed_values`. This is intentional: adding a new value type (e.g., a complex JSON policy document) requires no DDL change â€” only a new `policy_definitions` row with `value_type = 'Json'` and corresponding SDK serializer registration.
+The `policy_instances` table uses `value TEXT` (not a typed column) and `JSONB` for `allowed_values`. This is intentional: adding a new value type (e.g., a complex JSON policy document) requires no DDL change — only a new `policy_definitions` row with `value_type = 'Json'` and corresponding SDK serializer registration.
 
 For multi-dimensional scoping (e.g., per-role within a tenant, per-feature-flag combination), the `scope_key` pattern can be extended with a `scope_extensions JSONB` column added to `policy_instances` without breaking existing rows:
 
@@ -270,5 +270,5 @@ Existing instances have `scope_extensions = NULL`, treated as "no additional con
 - Immutability of active definitions eliminates class of bugs where a definition change silently invalidates existing instances.
 
 **Negative / Risks**
-- All L3 writes (user opt-outs) flow through PolicyService â€” at scale (millions of users), this is the hot path. Mitigated by: read replica for evaluations, partitioning by `user_id` range on L3 rows, and batching opt-out writes.
-- App-local L2 cache creates a dual-write path (app writes to PolicyService, then PolicyService change event refreshes app cache). Network partitions between app and PolicyService require the app to serve stale L2 values â€” acceptable given 5-minute TTL and non-safety-critical nature of L2 overrides.
+- All L3 writes (user opt-outs) flow through PolicyService — at scale (millions of users), this is the hot path. Mitigated by: read replica for evaluations, partitioning by `user_id` range on L3 rows, and batching opt-out writes.
+- App-local L2 cache creates a dual-write path (app writes to PolicyService, then PolicyService change event refreshes app cache). Network partitions between app and PolicyService require the app to serve stale L2 values — acceptable given 5-minute TTL and non-safety-critical nature of L2 overrides.

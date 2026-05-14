@@ -1,4 +1,4 @@
-﻿# ADR-006: MFE Policy Management Component Contract
+# ADR-006: MFE Policy Management Component Contract
 
 **Status**: Proposed  
 **Date**: 2026-05-11  
@@ -11,9 +11,9 @@
 
 Policy management surfaces exist in two places:
 
-1. **Central Policy Admin** â€” a standalone web application owned by ST Ops / the Identity Team. It provides a global view across all tenants and all policies. It is the primary surface for ST Ops actions (L0 changes, emergency exceptions, definition management).
+1. **Central Policy Admin** — a standalone web application owned by ST Ops / the team. It provides a global view across all tenants and all policies. It is the primary surface for ST Ops actions (L0 changes, emergency exceptions, definition management).
 
-2. **App-embedded MFE** â€” each product team can embed a policy panel directly into their own settings UI (e.g., the MFA settings page inside the main ServiceTitan app), giving tenant admins an in-context way to manage policies relevant to that app without navigating to a separate admin portal.
+2. **App-embedded MFE** — each product team can embed a policy panel directly into their own settings UI (e.g., the MFA settings page inside the main ServiceTitan app), giving tenant admins an in-context way to manage policies relevant to that app without navigating to a separate admin portal.
 
 The contract between these two surfaces and PolicyService must be consistent. Tenant admins interacting with an embedded MFE panel and ST Ops interacting with the Central Admin UI must see the same effective state.
 
@@ -27,7 +27,7 @@ App-embedded MFE panels are implemented as independently deployed micro-frontend
 
 Two implementation models are supported:
 
-#### Model A â€” Hosted iframe panel (fastest to ship)
+#### Model A — Hosted iframe panel (fastest to ship)
 
 PolicyService ships a pre-built HTML panel at:
 
@@ -40,7 +40,7 @@ The host app embeds this URL in an `<iframe>` inside its settings page. The pane
 **Pros**: No integration code required from the host app; panel is always up-to-date with PolicyService.  
 **Cons**: Limited styling customization; iframe isolation prevents native focus management.
 
-#### Model B â€” JS Component (recommended for new MFEs)
+#### Model B — JS Component (recommended for new MFEs)
 
 PolicyService ships `policy-panel` as an npm package. Host apps import and render the component directly:
 
@@ -140,8 +140,8 @@ For `Enum` policies, the panel also renders:
 
 ```
 Mount:
-  1. GET /definitions/{policyKey} â†’ load definition (valueType, allowedValues, overridability)
-  2. GET /tenants/{tenantId}/policies/{policyKey} â†’ load current L1 instance (or undefined)
+  1. GET /definitions/{policyKey} → load definition (valueType, allowedValues, overridability)
+  2. GET /tenants/{tenantId}/policies/{policyKey} → load current L1 instance (or undefined)
   3. Render appropriate control pre-populated with current value (or L0 default if no L1)
 
 Save:
@@ -169,21 +169,21 @@ The Central Policy Admin (`ium-policy-admin`) is a standalone React app deployed
 ### Layout
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  Policy Administration                    [ST Ops only]  â”‚
-â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
-â”‚              â”‚                                               â”‚
-â”‚  Navigation  â”‚  Main content area                            â”‚
-â”‚              â”‚                                               â”‚
-â”‚  Definitions â”‚  â”Œâ”€ Tenant: ACME Corp â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â” â”‚
-â”‚  Tenants     â”‚  â”‚                                          â”‚ â”‚
-â”‚  Exceptions  â”‚  â”‚  policy.mfa.enforcement_stage               â”‚ â”‚
-â”‚  Audit Log   â”‚  â”‚  [PolicyPanel component â€” editable]      â”‚ â”‚
-â”‚  Dashboard   â”‚  â”‚                                          â”‚ â”‚
-â”‚              â”‚  â”‚  policy.session.timeout_minutes             â”‚ â”‚
-â”‚              â”‚  â”‚  [PolicyPanel component â€” editable]      â”‚ â”‚
-â”‚              â”‚  â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌──────────────────────────────────────────────────────────────┐
+│  Policy Administration                    [ST Ops only]  │
+├──────────────┬───────────────────────────────────────────────┤
+│              │                                               │
+│  Navigation  │  Main content area                            │
+│              │                                               │
+│  Definitions │  ┌─ Tenant: ACME Corp ─────────────────────┐ │
+│  Tenants     │  │                                          │ │
+│  Exceptions  │  │  policy.mfa.enforcement_stage               │ │
+│  Audit Log   │  │  [PolicyPanel component — editable]      │ │
+│  Dashboard   │  │                                          │ │
+│              │  │  policy.session.timeout_minutes             │ │
+│              │  │  [PolicyPanel component — editable]      │ │
+│              │  └──────────────────────────────────────────┘ │
+└──────────────┴───────────────────────────────────────────────┘
 ```
 
 ### Pages
@@ -236,7 +236,7 @@ https://<app-host>/.well-known/policy-manifest.json
 
 The Central Admin UI fetches these manifests and displays deep-links next to each policy:
 
-> "This policy can also be configured in **Enterprise Hub â†’ Settings â†’ Security â†’ MFA**."
+> "This policy can also be configured in **Enterprise Hub → Settings → Security → MFA**."
 
 ---
 
@@ -289,11 +289,11 @@ The component:
 
 **Positive**
 - Tenant admins can manage policies in context (within the app they're using) without navigating to a separate admin portal.
-- Central Admin UI and app-embedded panels share the same `PolicyPanel` component â€” single implementation, consistent UX.
+- Central Admin UI and app-embedded panels share the same `PolicyPanel` component — single implementation, consistent UX.
 - Manifest-based registration means new apps register their panels without changes to the Central Admin codebase.
 - Real-time WebSocket updates ensure admin views don't go stale after ST Ops makes an emergency change.
 
 **Negative / Risks**
-- Model B (JS component) requires each host app to install and update `policy-panel`. Version drift is a risk â€” mitigated by publishing `policy-panel` with a locked peer dependency on the PolicyService API version it targets.
+- Model B (JS component) requires each host app to install and update `policy-panel`. Version drift is a risk — mitigated by publishing `policy-panel` with a locked peer dependency on the PolicyService API version it targets.
 - Manifest fetching from host apps creates a cross-origin dependency; host apps must serve `policy-manifest.json` with appropriate CORS headers.
 - The WebSocket endpoint adds operational complexity to PolicyService; can be deferred to Phase 2 (use long-polling initially).

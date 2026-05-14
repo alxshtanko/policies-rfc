@@ -1,4 +1,4 @@
-﻿# ADR-007: PolicyService Data Models and PostgreSQL Schema
+# ADR-007: PolicyService Data Models and PostgreSQL Schema
 
 **Status**: Proposed  
 **Date**: 2026-05-11  
@@ -160,7 +160,7 @@ CREATE TABLE policy.policy_instances (
     )
 );
 
--- â”€â”€ Indexes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+-- ── Indexes ──────────────────────────────────────────────────────────────────
 
 -- Primary hot path: SDK bulk fetch and evaluate (L0 + L1 per tenant)
 CREATE INDEX idx_pi_l0_l1_lookup
@@ -174,7 +174,7 @@ CREATE INDEX idx_pi_l2_lookup
     WHERE status = 'Active'
       AND level = 'L2';
 
--- L3 lookup (user scoped â€” separate because user_id nullable in most rows)
+-- L3 lookup (user scoped — separate because user_id nullable in most rows)
 CREATE INDEX idx_pi_l3_lookup
     ON policy.policy_instances(policy_definition_id, user_id)
     WHERE status = 'Active'
@@ -197,7 +197,7 @@ CREATE INDEX idx_pi_user_history
     WHERE user_id IS NOT NULL;
 
 COMMENT ON TABLE policy.policy_instances IS
-    'Runtime values for each policy at each scope level (L0â€“L3). '
+    'Runtime values for each policy at each scope level (L0–L3). '
     'Rows are never hard-deleted; lifecycle is managed via the status column.';
 ```
 
@@ -434,9 +434,9 @@ Flyway is used for all schema migrations, consistent with other `ium-*` microser
 policy-service/
   src/
     migrations/
-      V001__initial_schema.sql               â† Creates schema, tables, indexes
-      V002__policy_mfa_enforcement_stage.sql â† Seeds MFA definition + L0 instance
-      V003__policy_session_timeout.sql       â† Adds session timeout definition
+      V001__initial_schema.sql               ← Creates schema, tables, indexes
+      V002__policy_mfa_enforcement_stage.sql ← Seeds MFA definition + L0 instance
+      V003__policy_session_timeout.sql       ← Adds session timeout definition
       ...
 ```
 

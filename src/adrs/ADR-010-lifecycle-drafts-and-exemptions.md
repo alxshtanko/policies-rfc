@@ -1,4 +1,4 @@
-﻿# ADR-010: Lifecycle, Drafts & Exemption Workflow
+# ADR-010: Lifecycle, Drafts & Exemption Workflow
 
 **Status**: Proposed
 **Date**: 2026-05-13
@@ -11,11 +11,11 @@
 
 ADR-002 introduced four override flows (tenant, app, user, operator exception). What it did **not** introduce:
 
-1. **A way to configure a policy before activating it.** Admins must be able to draft a new SSO rollout, review the wording, schedule the activation date â€” then flip it on. Today every PUT immediately becomes Active.
-2. **An exemption *request* workflow.** ADR-002 treats exemptions as something only ST Ops can grant via `/admin/exceptions`. Real admins need a self-service flow where a user (or their manager) requests exemption â†’ an approver reviews â†’ approved exemptions become L4-Group or L5-User instances. The "approval" must be auditable and policy-scoped.
-3. **Group-level exemption mechanics.** With L4-Group from ADR-008 in place, but no workflow to create a group exemption from a request â€” bridging that requires entity + state-machine design.
+1. **A way to configure a policy before activating it.** Admins must be able to draft a new SSO rollout, review the wording, schedule the activation date — then flip it on. Today every PUT immediately becomes Active.
+2. **An exemption *request* workflow.** ADR-002 treats exemptions as something only ST Ops can grant via `/admin/exceptions`. Real admins need a self-service flow where a user (or their manager) requests exemption → an approver reviews → approved exemptions become L4-Group or L5-User instances. The "approval" must be auditable and policy-scoped.
+3. **Group-level exemption mechanics.** With L4-Group from ADR-008 in place, but no workflow to create a group exemption from a request — bridging that requires entity + state-machine design.
 
-This ADR fills both: a richer `status` lifecycle for `policy_instances`, plus a separate `exemption_request` entity with its own state machine. They're closely related (an approved exemption *materializes* a Draft â†’ Active instance), so they're designed together.
+This ADR fills both: a richer `status` lifecycle for `policy_instances`, plus a separate `exemption_request` entity with its own state machine. They're closely related (an approved exemption *materializes* a Draft → Active instance), so they're designed together.
 
 ---
 
@@ -26,30 +26,30 @@ This ADR fills both: a richer `status` lifecycle for `policy_instances`, plus a 
 Replace ADR-007's three-state status with five:
 
 ```
-Draft       â€” saved but not visible at evaluation
-PendingApproval â€” submitted for approval (when definition.requires_approval)
-Active      â€” in effect (today's only "live" state)
-Revoked     â€” superseded or manually rescinded
-Expired     â€” TTL elapsed
+Draft       — saved but not visible at evaluation
+PendingApproval — submitted for approval (when definition.requires_approval)
+Active      — in effect (today's only "live" state)
+Revoked     — superseded or manually rescinded
+Expired     — TTL elapsed
 ```
 
 Allowed transitions:
 ```
-Draft           â†’ PendingApproval (when approval required)
-Draft           â†’ Active          (direct activation, when no approval required)
-PendingApproval â†’ Active          (approver approves)
-PendingApproval â†’ Revoked         (approver denies, with reason)
-Active          â†’ Revoked
-Active          â†’ Expired         (background job at expires_at)
-Draft           â†’ Revoked         (admin discards before activation)
+Draft           → PendingApproval (when approval required)
+Draft           → Active          (direct activation, when no approval required)
+PendingApproval → Active          (approver approves)
+PendingApproval → Revoked         (approver denies, with reason)
+Active          → Revoked
+Active          → Expired         (background job at expires_at)
+Draft           → Revoked         (admin discards before activation)
 ```
 
 A Draft is invisible to evaluation. PolicyService still indexes it and the UI shows it in a "Drafts" tab. Activation has two flavors:
 
-- **Activate now**: status â†’ `Active`, `effective_at = NOW()`
+- **Activate now**: status → `Active`, `effective_at = NOW()`
 - **Schedule**: status stays `Draft` (or `PendingApproval`), `effective_at` set to future timestamp. A background job promotes it to `Active` at that time.
 
-This is distinct from the existing `effective_at` field's role for Active rows (which delays propagation but the row is *Active* the moment it's written). Drafts are not Active even if `effective_at` is in the past â€” the activation transition is explicit.
+This is distinct from the existing `effective_at` field's role for Active rows (which delays propagation but the row is *Active* the moment it's written). Drafts are not Active even if `effective_at` is in the past — the activation transition is explicit.
 
 ### 2. Bulk preview + activation ("plans")
 
@@ -138,38 +138,38 @@ CREATE INDEX idx_exemption_target_group ON policy.exemption_request(target_group
 ### 4. Exemption state machine
 
 ```
-            â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-            â”‚ Submitted  â”‚ â†â”€â”€â”€ user (or admin) submits request
-            â””â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜
-                  â”‚ approver picks it up
-                  â–¼
-            â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    withdraw     â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-            â”‚UnderReview â”‚ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶  â”‚Withdrawn â”‚
-            â””â”€â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”€â”˜                 â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                  â”‚
-       approve    â”‚   deny
-            â”Œâ”€â”€â”€â”€â”€â”´â”€â”€â”€â”€â”€â”
-            â–¼           â–¼
-      â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”
-      â”‚ Approved â”‚  â”‚ Denied â”‚
-      â””â”€â”€â”€â”€â”¬â”€â”€â”€â”€â”€â”˜  â””â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-           â”‚ creates PolicyInstance (Active, expires_at = requested)
-           â”‚
-           â–¼ background job at expires_at
-      â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-      â”‚ Expired  â”‚  (the request itself; the instance is independently Expired)
-      â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+            ┌────────────┐
+            │ Submitted  │ ←─── user (or admin) submits request
+            └─────┬──────┘
+                  │ approver picks it up
+                  ▼
+            ┌────────────┐    withdraw     ┌──────────┐
+            │UnderReview │ ─────────────▶  │Withdrawn │
+            └─────┬──────┘                 └──────────┘
+                  │
+       approve    │   deny
+            ┌─────┴─────┐
+            ▼           ▼
+      ┌──────────┐  ┌────────┐
+      │ Approved │  │ Denied │
+      └────┬─────┘  └────────┘
+           │ creates PolicyInstance (Active, expires_at = requested)
+           │
+           ▼ background job at expires_at
+      ┌──────────┐
+      │ Expired  │  (the request itself; the instance is independently Expired)
+      └──────────┘
 ```
 
 Transitions in detail:
 
-| From â†’ To       | Trigger                                  | Effect                                  |
+| From → To       | Trigger                                  | Effect                                  |
 |-----------------|------------------------------------------|-----------------------------------------|
-| Submitted â†’ UnderReview | Approver claims request          | Audit event `ExemptionUnderReview`      |
-| Submitted â†’ Withdrawn   | Requester cancels                | Audit event                             |
-| UnderReview â†’ Approved  | Approver approves                | Creates `policy_instance` at level User/Group with `expires_at = requested_expires_at`. Links `instance_id`. Audit event `ExemptionApproved`. |
-| UnderReview â†’ Denied    | Approver denies                  | No instance. Audit event with reason.   |
-| Approved â†’ Expired      | Background job past `expires_at` | Linked instance also Expires. Audit event. |
+| Submitted → UnderReview | Approver claims request          | Audit event `ExemptionUnderReview`      |
+| Submitted → Withdrawn   | Requester cancels                | Audit event                             |
+| UnderReview → Approved  | Approver approves                | Creates `policy_instance` at level User/Group with `expires_at = requested_expires_at`. Links `instance_id`. Audit event `ExemptionApproved`. |
+| UnderReview → Denied    | Approver denies                  | No instance. Audit event with reason.   |
+| Approved → Expired      | Background job past `expires_at` | Linked instance also Expires. Audit event. |
 
 ### 5. Approver routing
 
@@ -185,9 +185,9 @@ Transitions in detail:
 }
 ```
 
-Rule `any` = first valid approver decides. `all` = every group member must approve (rare). Approver identities are validated server-side against the same role/group sources used for policy evaluation (ADR-008 Â§3, Â§5).
+Rule `any` = first valid approver decides. `all` = every group member must approve (rare). Approver identities are validated server-side against the same role/group sources used for policy evaluation (ADR-008 §3, §5).
 
-If `approval_routing` is `null` for a definition, exemptions for that definition cannot be requested via this flow â€” only ST Ops can grant them via `/admin/exceptions`.
+If `approval_routing` is `null` for a definition, exemptions for that definition cannot be requested via this flow — only ST Ops can grant them via `/admin/exceptions`.
 
 ### 6. Differences from `/admin/exceptions` (ADR-002)
 
@@ -198,13 +198,13 @@ The pre-existing operator-exception endpoint stays. The two flows are complement
 | `/admin/exceptions` (ADR-002) | ST Ops | none (self-service for ops) | Emergency / regulator / outage |
 | `/exemption_requests` (this ADR) | Any user with `policy:request:exemption` | Configured per definition | Routine business-justified exemptions |
 
-Both produce `policy_instances` rows, both leave an audit trail. The difference is *who authorizes* â€” ops self-serve in the first, tenant-side governance in the second.
+Both produce `policy_instances` rows, both leave an audit trail. The difference is *who authorizes* — ops self-serve in the first, tenant-side governance in the second.
 
 ### 7. UX consistency between opt-in and exemption flows
 
 Per the PRD requirement that opt-in / opt-out / exemption UX be consistent:
 
-- The end-user `OptOutPanel` (ADR-006) detects when the policy has `requires_approval=true` and switches to "Request exemption" mode â€” same panel, two backend paths.
+- The end-user `OptOutPanel` (ADR-006) detects when the policy has `requires_approval=true` and switches to "Request exemption" mode — same panel, two backend paths.
 - The Central Admin UI exposes a unified "Open requests" view that lists both `/admin/exceptions` and `/exemption_requests` filtered by approver scope.
 - Both surfaces use the same form fields: justification, business_reason, requested_expires_at.
 
@@ -217,38 +217,38 @@ ExemptionSubmitted | ExemptionUnderReview | ExemptionApproved
 ExemptionDenied    | ExemptionWithdrawn   | ExemptionExpired
 ```
 
-Notifications (email / Slack to approvers, email confirmation to requester) are emitted by a separate `policy-notifications` consumer reading the same stream. The notification consumer is not part of the policy service itself â€” it's a thin worker that translates events into the org's preferred notification channels.
+Notifications (email / Slack to approvers, email confirmation to requester) are emitted by a separate `policy-notifications` consumer reading the same stream. The notification consumer is not part of the policy service itself — it's a thin worker that translates events into the org's preferred notification channels.
 
 ---
 
 ## API additions
 
 ```
-POST   /exemption-requests                     â€” create (any authenticated user)
-GET    /exemption-requests/{id}                â€” read
-GET    /me/exemption-requests                  â€” list mine
-GET    /tenants/{tid}/exemption-requests       â€” approver inbox (tenant scope)
-GET    /orgs/{oid}/exemption-requests          â€” approver inbox (org scope)
-POST   /exemption-requests/{id}/claim          â€” approver picks it up
-POST   /exemption-requests/{id}/approve        â€” approver approves (body: decision_notes)
-POST   /exemption-requests/{id}/deny           â€” approver denies (body: decision_notes)
-DELETE /exemption-requests/{id}                â€” requester withdraws
+POST   /exemption-requests                     — create (any authenticated user)
+GET    /exemption-requests/{id}                — read
+GET    /me/exemption-requests                  — list mine
+GET    /tenants/{tid}/exemption-requests       — approver inbox (tenant scope)
+GET    /orgs/{oid}/exemption-requests          — approver inbox (org scope)
+POST   /exemption-requests/{id}/claim          — approver picks it up
+POST   /exemption-requests/{id}/approve        — approver approves (body: decision_notes)
+POST   /exemption-requests/{id}/deny           — approver denies (body: decision_notes)
+DELETE /exemption-requests/{id}                — requester withdraws
 
-POST   /plans                                  â€” create plan
-POST   /plans/{id}/items                       â€” add Draft instance to plan
-POST   /plans/{id}/dry-run                     â€” evaluate scenarios with plan applied (body: contexts[])
-POST   /plans/{id}/submit                      â€” submit for approval (if any item requires it)
-POST   /plans/{id}/activate                    â€” atomic activation of all items
-DELETE /plans/{id}                             â€” discard
+POST   /plans                                  — create plan
+POST   /plans/{id}/items                       — add Draft instance to plan
+POST   /plans/{id}/dry-run                     — evaluate scenarios with plan applied (body: contexts[])
+POST   /plans/{id}/submit                      — submit for approval (if any item requires it)
+POST   /plans/{id}/activate                    — atomic activation of all items
+DELETE /plans/{id}                             — discard
 
-PUT    /tenants/{tid}/policies/{key}?status=Draft   â€” write as Draft instead of Active
-POST   /policies/{instance_id}/activate             â€” Draft â†’ Active transition
+PUT    /tenants/{tid}/policies/{key}?status=Draft   — write as Draft instead of Active
+POST   /policies/{instance_id}/activate             — Draft → Active transition
 ```
 
 New auth scopes:
-- `policy:request:exemption` â€” granted to authenticated users by default
-- `policy:approve:exemption` â€” granted to roles/groups per definition's `approval_routing`
-- `policy:plan:manage` â€” granted to anyone with `policy:write:*` at any level
+- `policy:request:exemption` — granted to authenticated users by default
+- `policy:approve:exemption` — granted to roles/groups per definition's `approval_routing`
+- `policy:plan:manage` — granted to anyone with `policy:write:*` at any level
 
 ---
 
@@ -286,11 +286,11 @@ Apps don't have to consume these; they're for admin tooling. The runtime SDK (`I
 
 | Critical gap                                              | Addressed by                  |
 |-----------------------------------------------------------|-------------------------------|
-| Configure rules before enabling them                      | Â§1 Draft state, Â§2 plans      |
-| Exemption workflow (request â†’ review â†’ approve)           | Â§3, Â§4 state machine          |
-| UX consistency between opt-in and exemption flows         | Â§7                            |
-| Group exemptions (delivered via approved requests â†’ L4-Group instance) | Â§3 `target_level='Group'` |
-| Decisions before single identity proceeds                 | partial â€” `approval_routing` allows policy-by-policy gating |
+| Configure rules before enabling them                      | §1 Draft state, §2 plans      |
+| Exemption workflow (request → review → approve)           | §3, §4 state machine          |
+| UX consistency between opt-in and exemption flows         | §7                            |
+| Group exemptions (delivered via approved requests → L4-Group instance) | §3 `target_level='Group'` |
+| Decisions before single identity proceeds                 | partial — `approval_routing` allows policy-by-policy gating |
 
 ---
 
@@ -298,12 +298,12 @@ Apps don't have to consume these; they're for admin tooling. The runtime SDK (`I
 
 **Positive**
 - Admins can now design a policy rollout, preview the impact, get approval, and activate atomically.
-- Drafts give the admin UI a real "save without applying" mode â€” long-overdue for any non-trivial config.
+- Drafts give the admin UI a real "save without applying" mode — long-overdue for any non-trivial config.
 - The exemption workflow eliminates the ops-ticket-as-policy anti-pattern: clear request artifact, approver routing, audit trail, automatic expiry.
-- Plans (Â§2) compose well with the multi-level hierarchy from ADR-008: a single plan can edit Org + Tenant + Group + User instances together with one approval gate.
+- Plans (§2) compose well with the multi-level hierarchy from ADR-008: a single plan can edit Org + Tenant + Group + User instances together with one approval gate.
 
 **Negative / risks**
 - More state means more SQL surface and more UI states. Approvers need clear inboxes; without thoughtful UX this becomes another ticket queue that nobody reads.
-- Approval routing is `JSONB` â€” flexible but complex to validate. Misconfigured routing could lock out approvals entirely. Mitigation: a `POST /definitions/{key}/approval-routing:validate` endpoint that simulates "who could approve this right now" and warns if the answer is empty.
-- Exemption auto-expiry is essential â€” every exemption must have `requested_expires_at`. Without it, exemptions silently become permanent. The schema makes it nullable but the UI enforces a max of 180 days for self-service exemptions; longer require ST Ops.
+- Approval routing is `JSONB` — flexible but complex to validate. Misconfigured routing could lock out approvals entirely. Mitigation: a `POST /definitions/{key}/approval-routing:validate` endpoint that simulates "who could approve this right now" and warns if the answer is empty.
+- Exemption auto-expiry is essential — every exemption must have `requested_expires_at`. Without it, exemptions silently become permanent. The schema makes it nullable but the UI enforces a max of 180 days for self-service exemptions; longer require ST Ops.
 - Background jobs proliferate: scheduled draft activation, exemption expiry, plan activation. Each is small but the operator must monitor them; consolidate into a single `policy_lifecycle_job` worker emitting Prometheus metrics.

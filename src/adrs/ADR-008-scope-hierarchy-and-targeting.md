@@ -1,4 +1,4 @@
-﻿# ADR-008: Scope Hierarchy & Targeting Expansion
+# ADR-008: Scope Hierarchy & Targeting Expansion
 
 **Status**: Proposed
 **Date**: 2026-05-13
@@ -10,12 +10,12 @@
 
 ## Context
 
-The hierarchy in ADR-001 (L0 platform â†’ L1 tenant â†’ L2 app â†’ L3 user) is sufficient for tenant-scoped MFA but **cannot express several first-class requirements from the PRD**:
+The hierarchy in ADR-001 (L0 platform → L1 tenant → L2 app → L3 user) is sufficient for tenant-scoped MFA but **cannot express several first-class requirements from the PRD**:
 
 1. **Org-level (franchise / parent company) targeting.** A franchise owning many tenants needs a single place to set policy across all of them, distinct from platform-wide L0 and from per-tenant L1.
 2. **Role-based targeting.** "Slow-roll SSO by role" can't be expressed when the only user-level scope is per-user opt-out.
 3. **Group exceptions.** Tenants must be able to grant exemptions to a group ("Sales team can keep SMS MFA") without writing per-user rows.
-4. **Environment / routing context.** Customers asked to "block Next" or "force Enterprise Hub" â€” that's a runtime context axis, not a scope.
+4. **Environment / routing context.** Customers asked to "block Next" or "force Enterprise Hub" — that's a runtime context axis, not a scope.
 5. **Context-aware evaluation** for future use (auth method, location, session risk, step-up action).
 
 These cannot be retrofitted as a single new column or one extra level; they require a coordinated reshape of the hierarchy, the scope columns, and `PolicyContext`.
@@ -29,19 +29,19 @@ These cannot be retrofitted as a single new column or one extra level; they requ
 Replace the numeric `L0..L3` levels with **named levels** that match the org chart. The names become the canonical identifier in DB and code; numeric labels are kept only as documentation hints.
 
 ```
-Platform   â”€ ST Ops; the floor and (usually) the ceiling
-   â”‚
-   â”œâ”€â”€ Org      â”€ Franchise / parent company; spans multiple tenants
-   â”‚     â”‚
-   â”‚     â””â”€â”€ Tenant â”€ Single tenant (most common config level)
-   â”‚            â”‚
-   â”‚            â”œâ”€â”€ App    â”€ Per-(app, tenant) overrides
-   â”‚            â”‚
-   â”‚            â””â”€â”€ Group  â”€ Per-(group, tenant) exemptions
-   â”‚                   â”‚
-   â”‚                   â””â”€â”€ User â”€ Individual opt-in/opt-out
-   â”‚
-   â””â”€â”€ (Tenant directly under Platform â€” when not part of an Org)
+Platform   ─ ST Ops; the floor and (usually) the ceiling
+   │
+   ├── Org      ─ Franchise / parent company; spans multiple tenants
+   │     │
+   │     └── Tenant ─ Single tenant (most common config level)
+   │            │
+   │            ├── App    ─ Per-(app, tenant) overrides
+   │            │
+   │            └── Group  ─ Per-(group, tenant) exemptions
+   │                   │
+   │                   └── User ─ Individual opt-in/opt-out
+   │
+   └── (Tenant directly under Platform — when not part of an Org)
 ```
 
 A `Tenant` does not require an `Org`. When a tenant has no parent org, its parent is `Platform` directly.
@@ -58,10 +58,10 @@ A `Tenant` does not require an `Org`. When a tenant has no parent org, its paren
 ### 2. Resolution order (most specific wins, within bounds)
 
 ```
-User  â–¶  Group  â–¶  App  â–¶  Tenant  â–¶  Org  â–¶  Platform
+User  ▶  Group  ▶  App  ▶  Tenant  ▶  Org  ▶  Platform
 ```
 
-Each level may only **tighten** the level above unless the definition explicitly permits relaxation at that level (`relaxation_allowed_at_<level>` flags). This is the same rule as ADR-002 â€” extended to the new levels.
+Each level may only **tighten** the level above unless the definition explicitly permits relaxation at that level (`relaxation_allowed_at_<level>` flags). This is the same rule as ADR-002 — extended to the new levels.
 
 Resolution algorithm (pseudo, ordered enums):
 ```
@@ -82,8 +82,8 @@ return (effective, resolved_level)
 
 Roles do **not** become a hierarchy level. Instead, every PolicyInstance can carry an `applies_to_roles JSONB` filter:
 
-- `null` (default) â€” applies to every user in the scope
-- `["admin", "manager"]` â€” only matches when `context.roles âˆ© applies_to_roles â‰  âˆ…`
+- `null` (default) — applies to every user in the scope
+- `["admin", "manager"]` — only matches when `context.roles ∩ applies_to_roles ≠ ∅`
 
 This lets a tenant write *one* L2-Tenant instance "SSO required for admin role only" instead of constructing N per-role policy keys.
 
@@ -112,8 +112,8 @@ interface PolicyContext {
 Each instance can carry an `applies_to_environments JSONB` filter, same shape and semantics as `applies_to_roles`.
 
 This is what enables policies like:
-- "Force Enterprise Hub for tenant ACME" â†’ an L2-Tenant policy `access.allowed_environments` whose value is `["EnterpriseHub", "Mobile"]`.
-- "Block Next for tenants on plan X" â†’ an L1-Org policy with `applies_to_environments: ["Next"]` and value `Block`.
+- "Force Enterprise Hub for tenant ACME" → an L2-Tenant policy `access.allowed_environments` whose value is `["EnterpriseHub", "Mobile"]`.
+- "Block Next for tenants on plan X" → an L1-Org policy with `applies_to_environments: ["Next"]` and value `Block`.
 
 ### 5. Group entity (lightweight, not a full IDP group)
 
@@ -137,7 +137,7 @@ policy_group_member:
   PK (group_id, user_id)
 ```
 
-PolicyService doesn't manage *all* groups in the platform â€” only those used for policy. When `source != 'manual'`, membership is read from the upstream directory via a sync job. Apps that already have richer group/role data (e.g. identity-service) expose it; PolicyService maintains its cache.
+PolicyService doesn't manage *all* groups in the platform — only those used for policy. When `source != 'manual'`, membership is read from the upstream directory via a sync job. Apps that already have richer group/role data (e.g. identity-service) expose it; PolicyService maintains its cache.
 
 ### 6. Expanded `PolicyContext`
 
@@ -175,7 +175,7 @@ public sealed record PolicyContext(
 
 ## Schema deltas to ADR-007
 
-### `policy_instances` â€” additions
+### `policy_instances` — additions
 
 ```sql
 ALTER TABLE policy.policy_instances
@@ -183,7 +183,7 @@ ALTER TABLE policy.policy_instances
   ADD COLUMN group_id UUID REFERENCES policy.policy_group(id),
   ADD COLUMN applies_to_roles        JSONB,
   ADD COLUMN applies_to_environments JSONB,
-  ADD COLUMN applies_to_user_types   JSONB;   -- deprecated; see ADR-008 Â§7
+  ADD COLUMN applies_to_user_types   JSONB;   -- deprecated; see ADR-008 §7
 
 -- Replace ADR-007's chk_l0..chk_l3 scope constraints with named-level versions:
 ALTER TABLE policy.policy_instances
@@ -223,7 +223,7 @@ CREATE INDEX idx_pi_group_lookup
     WHERE status = 'Active' AND level = 'Group';
 ```
 
-### `policy_definitions` â€” additions
+### `policy_definitions` — additions
 
 ```sql
 ALTER TABLE policy.policy_definitions
@@ -241,7 +241,7 @@ ALTER TABLE policy.policy_definitions
 -- version once no code references them. See `Migration` below.
 ```
 
-### `policy_group` and `policy_group_member` â€” new tables
+### `policy_group` and `policy_group_member` — new tables
 
 ```sql
 CREATE TABLE policy.policy_group (
@@ -268,20 +268,20 @@ CREATE TABLE policy.policy_group_member (
 CREATE INDEX idx_group_member_user ON policy.policy_group_member(user_id);
 ```
 
-### `org_tenant` â€” new mapping table
+### `org_tenant` — new mapping table
 
 PolicyService needs to know which org a tenant belongs to in order to resolve Org-level instances during evaluation.
 
 ```sql
 CREATE TABLE policy.org_tenant (
     org_id    INT NOT NULL,
-    tenant_id INT NOT NULL PRIMARY KEY,   -- one tenant â†” one org
+    tenant_id INT NOT NULL PRIMARY KEY,   -- one tenant ↔ one org
     added_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_org_tenant_org ON policy.org_tenant(org_id);
 ```
 
-This is a **read-only mirror** â€” the source of truth for org structure lives in the platform's tenant directory (host-api / identity-service). PolicyService maintains its copy via change events; if the upstream emits `TenantAddedToOrg` / `TenantRemovedFromOrg` events, PolicyService consumes them. Until that integration ships, the mapping is bootstrapped via Flyway and manually maintained.
+This is a **read-only mirror** — the source of truth for org structure lives in the platform's tenant directory (host-api / identity-service). PolicyService maintains its copy via change events; if the upstream emits `TenantAddedToOrg` / `TenantRemovedFromOrg` events, PolicyService consumes them. Until that integration ships, the mapping is bootstrapped via Flyway and manually maintained.
 
 ---
 
@@ -311,9 +311,9 @@ DELETE /tenants/{tenantId}/groups/{groupId}/members/{userId}
 ```
 
 Auth scopes (additions):
-- `policy:write:org` â€” Org Admin
-- `policy:write:group` â€” Tenant Admin (same as `policy:write:tenant`)
-- `policy:groups:manage` â€” Tenant Admin
+- `policy:write:org` — Org Admin
+- `policy:write:group` — Tenant Admin (same as `policy:write:tenant`)
+- `policy:groups:manage` — Tenant Admin
 
 ### Targeting on PUT bodies
 
@@ -350,11 +350,11 @@ POST /evaluate
 
 ## SDK changes (delta on ADR-001)
 
-### `PolicyContext` â€” see Â§6 above.
+### `PolicyContext` — see §6 above.
 
-### `IPolicyEvaluator` â€” unchanged signature, expanded internals to walk the six levels.
+### `IPolicyEvaluator` — unchanged signature, expanded internals to walk the six levels.
 
-### `IPolicyGroupSource` â€” new interface for apps that resolve group membership locally (avoiding a roundtrip to PolicyService on every eval):
+### `IPolicyGroupSource` — new interface for apps that resolve group membership locally (avoiding a roundtrip to PolicyService on every eval):
 
 ```csharp
 public interface IPolicyGroupSource
@@ -368,7 +368,7 @@ public interface IPolicyGroupSource
 
 If no implementation is registered, the SDK falls back to `GET /tenants/{tenantId}/users/{userId}/groups` on PolicyService.
 
-### `IPolicyRoleSource` â€” same pattern for roles, registered by apps that have an in-process role cache (host-api, monolith).
+### `IPolicyRoleSource` — same pattern for roles, registered by apps that have an in-process role cache (host-api, monolith).
 
 ---
 
@@ -376,11 +376,11 @@ If no implementation is registered, the SDK falls back to `GET /tenants/{tenantI
 
 This is a coordinated, multi-step migration. Production goes through three Flyway versions:
 
-1. **V010** â€” additive: add new columns, new tables, new indexes; backfill `policy_definitions.tenant_allowed = l1_allowed`, etc. New code starts writing both old and new columns. CHECK constraint is replaced atomically.
+1. **V010** — additive: add new columns, new tables, new indexes; backfill `policy_definitions.tenant_allowed = l1_allowed`, etc. New code starts writing both old and new columns. CHECK constraint is replaced atomically.
 
-2. **V011** â€” rename instance levels: `UPDATE policy.policy_instances SET level = CASE level WHEN 'L0' THEN 'Platform' WHEN 'L1' THEN 'Tenant' WHEN 'L2' THEN 'App' WHEN 'L3' THEN 'User' END;` plus the equivalent for `policy_instance_lock`. SDK readers accept both old and new for one release.
+2. **V011** — rename instance levels: `UPDATE policy.policy_instances SET level = CASE level WHEN 'L0' THEN 'Platform' WHEN 'L1' THEN 'Tenant' WHEN 'L2' THEN 'App' WHEN 'L3' THEN 'User' END;` plus the equivalent for `policy_instance_lock`. SDK readers accept both old and new for one release.
 
-3. **V012** â€” drop legacy columns: `l1_allowed`, `l2_allowed`, `l3_allowed`, `applies_to_user_types`. Only after every consumer reports it has upgraded its SDK.
+3. **V012** — drop legacy columns: `l1_allowed`, `l2_allowed`, `l3_allowed`, `applies_to_user_types`. Only after every consumer reports it has upgraded its SDK.
 
 A monitoring dashboard tracks per-app SDK version + which scope columns it reads, so we can verify safety before V012 runs.
 
@@ -391,16 +391,16 @@ A monitoring dashboard tracks per-app SDK version + which scope columns it reads
 | Critical gap                                                | Addressed by                       |
 |-------------------------------------------------------------|------------------------------------|
 | Configure rules before enabling them                        | See ADR-010 (Draft state)          |
-| Future org/root-level policy management                     | Â§1 Org level                       |
-| Role-based targeting                                        | Â§3 `applies_to_roles`              |
-| Group exceptions                                            | Â§1 Group level, Â§5 `policy_group`  |
-| Environment/routing context                                 | Â§4 Environment in PolicyContext    |
-| Multi-level opt-out (org/role/group/app)                    | Â§1 levels + Â§3/Â§5 targeting        |
-| Context-aware evaluation (role, env, auth method, location) | Â§6 expanded `PolicyContext`        |
-| Slow-roll SSO by role                                       | Â§3 (`applies_to_roles`)            |
-| Restrict access to apps/environments                        | Â§4 `applies_to_environments` + policy `access.allowed_environments` |
-| Block Next / force Enterprise Hub                           | Â§4 (concrete example above)        |
-| Cross-tenant linking control                                | Â§1 Org level + ADR-009 deps        |
+| Future org/root-level policy management                     | §1 Org level                       |
+| Role-based targeting                                        | §3 `applies_to_roles`              |
+| Group exceptions                                            | §1 Group level, §5 `policy_group`  |
+| Environment/routing context                                 | §4 Environment in PolicyContext    |
+| Multi-level opt-out (org/role/group/app)                    | §1 levels + §3/§5 targeting        |
+| Context-aware evaluation (role, env, auth method, location) | §6 expanded `PolicyContext`        |
+| Slow-roll SSO by role                                       | §3 (`applies_to_roles`)            |
+| Restrict access to apps/environments                        | §4 `applies_to_environments` + policy `access.allowed_environments` |
+| Block Next / force Enterprise Hub                           | §4 (concrete example above)        |
+| Cross-tenant linking control                                | §1 Org level + ADR-009 deps        |
 | (Step-up MFA action context, factor catalog,                | ADR-009                            |
 |  multi-provider SSO, session-revoke cascade)                |                                    |
 | (Exemption workflow, draft state)                           | ADR-010                            |
@@ -411,12 +411,12 @@ A monitoring dashboard tracks per-app SDK version + which scope columns it reads
 
 **Positive**
 - The hierarchy now matches the org chart instead of being numbered abstractly.
-- A single Org-level write affects all child tenants â€” eliminates per-tenant copy-paste at franchises.
+- A single Org-level write affects all child tenants — eliminates per-tenant copy-paste at franchises.
 - Role and environment are first-class filters: most targeting needs can be expressed as a single PolicyInstance plus filters, instead of an explosion of definitions.
 - The Group level provides the missing "exempt the sales team from MFA stage 5" capability without per-user opt-out spam.
 
 **Negative / risks**
-- Six levels make resolution more expensive â€” eight DB lookups in the worst case (Platform/Org/Tenant/App, plus Group/User, plus role/env filter checks). Mitigation: SDK bulk-fetch pre-loads all relevant instances at startup; per-request eval is in-memory.
-- The Tenant â†” Org mapping introduces a foreign data dependency PolicyService doesn't currently own. Stale mapping = wrong Org-level resolution. Mitigation: change-event subscription from the tenant directory.
+- Six levels make resolution more expensive — eight DB lookups in the worst case (Platform/Org/Tenant/App, plus Group/User, plus role/env filter checks). Mitigation: SDK bulk-fetch pre-loads all relevant instances at startup; per-request eval is in-memory.
+- The Tenant ↔ Org mapping introduces a foreign data dependency PolicyService doesn't currently own. Stale mapping = wrong Org-level resolution. Mitigation: change-event subscription from the tenant directory.
 - Role data is heterogeneous across apps (monolith has one role set, EH has another). Apps must implement `IPolicyRoleSource` consistently or fall back to the canonical role list from identity-service.
 - Group membership at high scale (10k+ users per tenant) makes per-user evaluation expensive without a local group cache. The `IPolicyGroupSource` interface is mandatory for apps with high QPS.

@@ -1,4 +1,4 @@
-﻿# ADR-002: Policy Override and Exception Flows
+# ADR-002: Policy Override and Exception Flows
 
 **Status**: Proposed  
 **Date**: 2026-05-11  
@@ -9,14 +9,14 @@
 
 ## Context
 
-The policy hierarchy (L0 â†’ L1 â†’ L2 â†’ L3) is deliberately layered: higher levels constrain lower ones. However, the real world requires escape hatches:
+The policy hierarchy (L0 → L1 → L2 → L3) is deliberately layered: higher levels constrain lower ones. However, the real world requires escape hatches:
 
 - A tenant admin needs to set a company-wide MFA enforcement stage that is stricter or looser than the platform default (within allowed bounds).
 - A specific application (e.g., the Admin module) must be able to enforce a minimum security floor regardless of the tenant-level setting.
-- Individual users need an opt-out path when their tenant's stage permits it (e.g., stages 4â€“6 of MFA enforcement).
+- Individual users need an opt-out path when their tenant's stage permits it (e.g., stages 4–6 of MFA enforcement).
 - ServiceTitan operations staff must be able to grant time-bounded exceptions for specific tenants or users without a production code change.
 
-Without explicit override and exception flows, any deviation from the platform default requires a support ticket, a code deployment, or an undocumented config change â€” all of which are slow, unaudited, and unrecoverable.
+Without explicit override and exception flows, any deviation from the platform default requires a support ticket, a code deployment, or an undocumented config change — all of which are slow, unaudited, and unrecoverable.
 
 ---
 
@@ -39,27 +39,27 @@ An override at level N can only **tighten** the effective policy unless the defi
 
 ---
 
-## Flow 1 â€” Tenant Override (L1)
+## Flow 1 — Tenant Override (L1)
 
 A tenant admin raises the MFA enforcement stage for their company. This is the most common override.
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”    POST /tenants/{tenantId}/policies/{key}    â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚  Tenant Adminâ”‚ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶  â”‚  PolicyService   â”‚
-â”‚  (Central UI â”‚                                               â”‚                  â”‚
-â”‚   or MFE)    â”‚ â—€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ 200 OK (PolicyInstance) â”€â”€ â”‚  1. Authenticate â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                                               â”‚  2. Load L0      â”‚
-                                                               â”‚  3. Validate     â”‚
-                                                               â”‚     bounds       â”‚
-                                                               â”‚  4. Persist L1   â”‚
-                                                               â”‚  5. Publish      â”‚
-                                                               â”‚  PolicyInstance  â”‚
-                                                               â”‚  Changed event   â”‚
-                                                               â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-                                                                        â”‚
+┌──────────────┐    POST /tenants/{tenantId}/policies/{key}    ┌──────────────────┐
+│  Tenant Admin│ ──────────────────────────────────────────▶  │  PolicyService   │
+│  (Central UI │                                               │                  │
+│   or MFE)    │ ◀──────────────── 200 OK (PolicyInstance) ── │  1. Authenticate │
+└──────────────┘                                               │  2. Load L0      │
+                                                               │  3. Validate     │
+                                                               │     bounds       │
+                                                               │  4. Persist L1   │
+                                                               │  5. Publish      │
+                                                               │  PolicyInstance  │
+                                                               │  Changed event   │
+                                                               └──────────────────┘
+                                                                        │
                                                                ServiceBus topic
-                                                                        â”‚
-                                                                        â–¼
+                                                                        │
+                                                                        ▼
                                                                SDK in each app
                                                                invalidates cache
                                                                for (tenantId, key)
@@ -67,7 +67,7 @@ A tenant admin raises the MFA enforcement stage for their company. This is the m
 
 **Validation rules**:
 - `value` must be in `definition.allowedValues`
-- For ordered enums: `value` must be within `[definition.minValue, l0.value]` â€” tenants cannot exceed the platform ceiling (unless `l1RelaxationAllowed` is set)
+- For ordered enums: `value` must be within `[definition.minValue, l0.value]` — tenants cannot exceed the platform ceiling (unless `l1RelaxationAllowed` is set)
 - If `definition.l1Allowed == false`, the request is rejected with 403
 
 **Request body**:
@@ -82,13 +82,13 @@ A tenant admin raises the MFA enforcement stage for their company. This is the m
 
 ---
 
-## Flow 2 â€” Application / Module Override (L2)
+## Flow 2 — Application / Module Override (L2)
 
 L2 overrides come in two forms:
 
 ### 2a. Code-registered override (preferred for permanent, app-owned floors)
 
-The app implements `IPolicyOverrideProvider<T>` (see ADR-001). This is not persisted in the DB â€” it is baked into the app's deployment. Appropriate for: "the Admin module always enforces at least `AdminsAndPrivileged`."
+The app implements `IPolicyOverrideProvider<T>` (see ADR-001). This is not persisted in the DB — it is baked into the app's deployment. Appropriate for: "the Admin module always enforces at least `AdminsAndPrivileged`."
 
 Pros: no API call required, no race conditions, survives PolicyService outages.  
 Cons: requires a deployment to change; not visible in the Central Policy Admin UI.
@@ -105,7 +105,7 @@ Authorization: Bearer <service-account-token>
 
 {
   "value": "AllUsersOptOut",
-  "reason": "High-risk module â€” all users must verify"
+  "reason": "High-risk module — all users must verify"
 }
 ```
 
@@ -115,7 +115,7 @@ Authorization: Bearer <service-account-token>
 
 ---
 
-## Flow 3 â€” User Opt-Out / Opt-In (L3)
+## Flow 3 — User Opt-Out / Opt-In (L3)
 
 Users can opt out of a policy _only_ if:
 
@@ -125,16 +125,16 @@ Users can opt out of a policy _only_ if:
 4. The user's `UserType` is in `definition.applicableUserTypes` for the opt-out gate
 
 ```
-â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”  POST /me/policies/{key}/opt-out   â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-â”‚     User     â”‚ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶ â”‚  PolicyService   â”‚
-â”‚   (via MFE)  â”‚                                    â”‚                  â”‚
-â”‚              â”‚                                    â”‚  1. Auth user    â”‚
-â”‚              â”‚ â—€â”€â”€ 200 OK or 403 (not eligible) â”€ â”‚  2. Resolve L2   â”‚
-â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜                                    â”‚  3. Check gates  â”‚
-                                                    â”‚  4. Persist L3   â”‚
-                                                    â”‚     (with expiry)â”‚
-                                                    â”‚  5. Audit event  â”‚
-                                                    â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+┌──────────────┐  POST /me/policies/{key}/opt-out   ┌──────────────────┐
+│     User     │ ─────────────────────────────────▶ │  PolicyService   │
+│   (via MFE)  │                                    │                  │
+│              │                                    │  1. Auth user    │
+│              │ ◀── 200 OK or 403 (not eligible) ─ │  2. Resolve L2   │
+└──────────────┘                                    │  3. Check gates  │
+                                                    │  4. Persist L3   │
+                                                    │     (with expiry)│
+                                                    │  5. Audit event  │
+                                                    └──────────────────┘
 ```
 
 **L3 instance created**:
@@ -159,7 +159,7 @@ Users can opt out of a policy _only_ if:
 
 ---
 
-## Flow 4 â€” Emergency / Operator Exception (Cross-Level)
+## Flow 4 — Emergency / Operator Exception (Cross-Level)
 
 ST Ops staff (with `policy:admin` scope) can grant a time-bounded exception at any level, bypassing normal constraint validation.
 
@@ -171,7 +171,7 @@ Authorization: Bearer <ops-token>   (requires policy:admin scope)
   "policyKey": "policy.mfa.enforcement_stage",
   "targetLevel": "L1",
   "value": "Disabled",
-  "reason": "Tenant migration â€” MFA temporarily suspended",
+  "reason": "Tenant migration — MFA temporarily suspended",
   "expiresAt": "2026-05-18T23:59:59Z",
   "approvedBy": "ops-user@example.com",
   "ticketRef": "OPS-4521"
@@ -180,7 +180,7 @@ Authorization: Bearer <ops-token>   (requires policy:admin scope)
 
 - Requires two-factor confirmation from the API caller.
 - `ticketRef` is mandatory for audit traceability.
-- `expiresAt` is mandatory â€” exceptions never persist indefinitely.
+- `expiresAt` is mandatory — exceptions never persist indefinitely.
 - PolicyService sets a background job to automatically clean up expired exceptions and re-evaluate affected users.
 
 **Expiry handling**:
@@ -188,7 +188,7 @@ Authorization: Bearer <ops-token>   (requires policy:admin scope)
 ExpiryJob (runs every minute):
   1. SELECT * FROM policy_instances WHERE expires_at <= NOW() AND expired = false
   2. For each expired instance:
-     a. Mark as expired (soft delete, not hard delete â€” preserves audit history)
+     a. Mark as expired (soft delete, not hard delete — preserves audit history)
      b. Publish PolicyInstanceExpired event
      c. SDK invalidates cache for (tenantId/userId, policyKey)
 ```
@@ -199,11 +199,11 @@ ExpiryJob (runs every minute):
 
 | Override | Who | Can Tighten | Can Relax | Requires Approval |
 |----------|-----|-------------|-----------|-------------------|
-| L0 â†’ L1  | Tenant Admin | Yes | Only if `l1RelaxationAllowed` | No (self-service) |
-| L1 â†’ L2  | App (code)   | Yes | No                            | No (code-owned)   |
-| L1 â†’ L2  | App (API)    | Yes | No                            | No (service acct) |
-| L2 â†’ L3  | User         | Yes | Only if `optOutAllowed`       | No (self-service) |
-| Any â†’ Any| ST Ops       | Yes | Yes (with `policy:admin` scope) | Yes (ticketRef)  |
+| L0 → L1  | Tenant Admin | Yes | Only if `l1RelaxationAllowed` | No (self-service) |
+| L1 → L2  | App (code)   | Yes | No                            | No (code-owned)   |
+| L1 → L2  | App (API)    | Yes | No                            | No (service acct) |
+| L2 → L3  | User         | Yes | Only if `optOutAllowed`       | No (self-service) |
+| Any → Any| ST Ops       | Yes | Yes (with `policy:admin` scope) | Yes (ticketRef)  |
 
 ---
 
@@ -225,19 +225,19 @@ The combination of L1, L2, and L3 instances supports all required granularity:
 ## Lifecycle State Machine for PolicyInstance
 
 ```
-          â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”
-          â”‚ Draft  â”‚ (optional staging)
-          â””â”€â”€â”€â”¬â”€â”€â”€â”€â”˜
-              â”‚ activate
-              â–¼
-          â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”      expires_at reached      â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-          â”‚ Active â”‚ â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â–¶  â”‚ Expired â”‚
-          â””â”€â”€â”€â”¬â”€â”€â”€â”€â”˜                              â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
-              â”‚ manual revoke / superseded
-              â–¼
-          â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
-          â”‚ Revoked  â”‚
-          â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
+          ┌────────┐
+          │ Draft  │ (optional staging)
+          └───┬────┘
+              │ activate
+              ▼
+          ┌────────┐      expires_at reached      ┌─────────┐
+          │ Active │ ──────────────────────────▶  │ Expired │
+          └───┬────┘                              └─────────┘
+              │ manual revoke / superseded
+              ▼
+          ┌──────────┐
+          │ Revoked  │
+          └──────────┘
 ```
 
 All state transitions emit an audit event. No instances are hard-deleted; they are soft-archived to preserve the full history of what was in effect when.
@@ -255,7 +255,7 @@ Creating an L1 override when one already exists **replaces** the existing instan
 **Positive**
 - All deviations from default policy are explicit, audited, and time-bounded.
 - Tenant self-service removes ST Ops from routine configuration changes.
-- Emergency exceptions have a mandatory expiry â€” no forgotten overrides.
+- Emergency exceptions have a mandatory expiry — no forgotten overrides.
 - The opt-out/opt-in flows give users agency while maintaining an audit trail.
 
 **Negative / Risks**
