@@ -19,6 +19,7 @@ import {
   useCanvasState,
   useHostTheme,
 } from '@/canvas-ui';
+import { AdrLink } from '@/components/AdrLink';
 import { SectionHeading } from '@/components/SectionHeading';
 
 // ─── Domain data ─────────────────────────────────────────────────────────────
@@ -224,9 +225,12 @@ export default function IntegrationDesign() {
       <Callout tone="info" title="Where this lives in code">
         PolicyService → new <Code>policy-service</Code> repo. SDK → internal NuGet
         (<Code>PolicyFramework</Code>). Frontend client + admin component → internal npm packages
-        (<Code>policy-client</Code>, <Code>policy-panel</Code>). ADRs 001–010 are under
-        <Text as="span"> </Text><Code>docs/adr/</Code>. Critical PRD gaps are covered by
-        ADRs 008 (scope hierarchy), 009 (composition + side effects), and 010 (drafts + exemptions).
+        (<Code>policy-client</Code>, <Code>policy-panel</Code>). The full architecture is captured
+        in <a href="#/adrs" className="adr-inline-link">ten ADRs</a>: foundational design
+        (<AdrLink id="001" /> through <AdrLink id="007" />) and PRD-driven extensions
+        (<AdrLink id="008">ADR-008 scope hierarchy</AdrLink>,
+        <Text as="span"> </Text><AdrLink id="009">ADR-009 composition + side effects</AdrLink>,
+        <Text as="span"> </Text><AdrLink id="010">ADR-010 drafts + exemptions</AdrLink>).
       </Callout>
     </Stack>
   );
@@ -660,13 +664,13 @@ function OverrideLifecycle() {
 
   const steps: { actor: string; tone: 'info' | 'neutral' | 'success'; title: string; detail: ReactNode }[] = [
     { actor: 'Tenant Admin', tone: 'info', title: 'Submit override via MFE',
-      detail: <Text size="small">Picks a new stage in the embedded <Code>policy-panel</Code>. May save as Draft first, then activate (ADR-010).</Text> },
+      detail: <Text size="small">Picks a new stage in the embedded <Code>policy-panel</Code>. May save as Draft first, then activate (<AdrLink id="010" />).</Text> },
     { actor: 'PolicyService', tone: 'neutral', title: 'Validate + persist',
       detail: <Text size="small">Checks against Platform/Org bounds and definition flags (<Code>tenant_allowed</Code>, <Code>relaxation_allowed_at</Code>), atomically revokes prior Tenant row, inserts the new <Code>PolicyInstance</Code> at level <Code>Tenant</Code>.</Text> },
     { actor: 'PolicyService', tone: 'neutral', title: 'Publish change event',
       detail: <Text size="small">Emits <Code>PolicyInstanceChanged</Code> to ServiceBus topic <Code>policy-changes</Code> with routing key <Code>(tenantId=12345, policyKey=...)</Code>.</Text> },
     { actor: 'SDK', tone: 'neutral', title: 'Invalidate caches across apps',
-      detail: <Text size="small">All app SDKs subscribed for this <Code>(tenant, policy)</Code> receive the event and evict their local cache entry. Any registered <Code>IPolicyChangeHandler</Code> also runs (ADR-009 side effects).</Text> },
+      detail: <Text size="small">All app SDKs subscribed for this <Code>(tenant, policy)</Code> receive the event and evict their local cache entry. Any registered <Code>IPolicyChangeHandler</Code> also runs (<AdrLink id="009">ADR-009 side effects</AdrLink>).</Text> },
     { actor: 'Audit Sink', tone: 'neutral', title: 'Index audit record',
       detail: <Text size="small">Consumes the same event from a separate subscription, enriches with tenant name, bulk-indexes to <Code>policy-changes-YYYY.MM</Code>.</Text> },
     { actor: 'Dashboard', tone: 'success', title: 'New state visible',

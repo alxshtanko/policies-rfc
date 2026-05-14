@@ -12,6 +12,7 @@ import {
   Stack,
   Text,
 } from '@/canvas-ui';
+import { ADR_INDEX } from '@/adrs/manifest';
 
 export default function Home() {
   return (
@@ -81,12 +82,25 @@ export default function Home() {
       </Grid>
 
       <Stack gap={10}>
-        <H2>Source</H2>
+        <H2>Architecture Decision Records</H2>
         <Text size="small" tone="secondary">
-          Both pages are ports of Cursor IDE canvases. The full ADRs that back them
-          (SDK design, override flows, storage, audit, API, MFE component, data model) sit
-          alongside as markdown.
+          Every design choice is captured in a numbered ADR. Foundational decisions
+          (001–007) cover SDK, override flows, storage, audit, API, MFE, and data model.
+          PRD-driven extensions (008–010) introduce the six-level scope hierarchy,
+          policy composition + side effects, and the lifecycle / exemption workflow.
         </Text>
+        <Row gap={8} wrap>
+          {ADR_INDEX.map((adr) => (
+            <a key={adr.id} href={`#/adrs/${adr.id}`} className="adr-inline-link">
+              <Pill size="sm" tone={adr.category === 'PRD extensions' ? 'warning' : 'info'}>
+                ADR-{adr.id}
+              </Pill>
+            </a>
+          ))}
+        </Row>
+        <Row gap={10} align="center">
+          <a href="#/adrs" className="adr-open-link">Open ADRs tab →</a>
+        </Row>
       </Stack>
     </Stack>
   );

@@ -19,6 +19,7 @@ import {
   useHostTheme,
   type HostTheme,
 } from '@/canvas-ui';
+import { AdrLink } from '@/components/AdrLink';
 import { SectionHeading } from '@/components/SectionHeading';
 
 // ─── Page root ────────────────────────────────────────────────────────────────
@@ -105,8 +106,9 @@ export default function PolicyServiceDataModel() {
 
       <Stack gap={12}>
         <SectionHeading term="data-model:targeting" title="Targeting filters" subtitle="Data model">
-          Targeting filters (ADR-008)
+          Targeting filters
         </SectionHeading>
+        <Row gap={6}><AdrLink id="008">From ADR-008</AdrLink></Row>
         <Text tone="secondary">
           Orthogonal to the scope hierarchy: roles, environments, and actions are JSONB filters
           on the instance row. The same instance can target "only admins in Enterprise Hub" without
@@ -117,8 +119,9 @@ export default function PolicyServiceDataModel() {
 
       <Stack gap={12}>
         <SectionHeading term="data-model:lifecycle" title="Instance lifecycle" subtitle="Data model">
-          Instance lifecycle (ADR-010)
+          Instance lifecycle
         </SectionHeading>
+        <Row gap={6}><AdrLink id="010">From ADR-010</AdrLink></Row>
         <Text tone="secondary">
           The <Code>status</Code> column now has five values. Drafts are invisible at evaluation
           time, can be grouped into a <Code>policy_plan</Code> for atomic activation, and may
@@ -129,8 +132,9 @@ export default function PolicyServiceDataModel() {
 
       <Stack gap={12}>
         <SectionHeading term="data-model:exemptions" title="Exemption workflow" subtitle="Data model">
-          Exemption workflow (ADR-010)
+          Exemption workflow
         </SectionHeading>
+        <Row gap={6}><AdrLink id="010">From ADR-010</AdrLink></Row>
         <Text tone="secondary">
           A separate entity tracks self-service exemption requests through approval. Approved
           requests materialize a User or Group instance with <Code>expires_at</Code> set to the
@@ -142,8 +146,9 @@ export default function PolicyServiceDataModel() {
 
       <Stack gap={12}>
         <SectionHeading term="data-model:catalogs" title="Reference catalogs" subtitle="Data model">
-          Reference catalogs (ADR-009)
+          Reference catalogs
         </SectionHeading>
+        <Row gap={6}><AdrLink id="009">From ADR-009</AdrLink></Row>
         <Text tone="secondary">
           Platform-managed lookup tables that composite policies reference. Adding a new factor or
           provider is a Flyway row insert; no schema churn.
@@ -153,8 +158,9 @@ export default function PolicyServiceDataModel() {
 
       <Stack gap={12}>
         <SectionHeading term="data-model:dependencies" title="Policy dependencies" subtitle="Data model">
-          Policy dependencies (ADR-009)
+          Policy dependencies
         </SectionHeading>
+        <Row gap={6}><AdrLink id="009">From ADR-009</AdrLink></Row>
         <Text tone="secondary">
           Declarative relations between definitions used by the admin UI to grey out controls
           superseded by an active parent (e.g. <Code>SsoOnly</Code> invalidates account-linking
@@ -165,8 +171,9 @@ export default function PolicyServiceDataModel() {
 
       <Callout tone="info" title="Source of truth">
         Full DDL, stored procedure body, and migration order in
-        <Text as="span"> </Text><Code>ADR-007 Data Models & Schema</Code>. REST contract in
-        <Text as="span"> </Text><Code>ADR-005 PolicyService API</Code>.
+        <Text as="span"> </Text><AdrLink id="007">ADR-007 Data Models & Schema</AdrLink>.
+        REST contract in <AdrLink id="005">ADR-005 PolicyService API</AdrLink>. Browse all ten ADRs in
+        the <a href="#/adrs" className="adr-inline-link">ADRs tab</a>.
       </Callout>
     </Stack>
   );
@@ -185,8 +192,10 @@ function Header() {
         ServiceBus + Kafka eventing, deployed as the <Code>policy-service</Code> microservice.
       </Text>
       <Text size="small" tone="tertiary">
-        Schema reflects ADR-007 + the PRD-driven extensions in ADR-008 (scope hierarchy),
-        ADR-009 (value composition + side effects), and ADR-010 (lifecycle + exemption workflow).
+        Schema reflects <AdrLink id="007">ADR-007</AdrLink> plus the PRD-driven extensions in
+        <Text as="span"> </Text><AdrLink id="008">ADR-008 (scope hierarchy)</AdrLink>,
+        <Text as="span"> </Text><AdrLink id="009">ADR-009 (value composition + side effects)</AdrLink>,
+        and <AdrLink id="010">ADR-010 (lifecycle + exemption workflow)</AdrLink>.
       </Text>
     </Stack>
   );

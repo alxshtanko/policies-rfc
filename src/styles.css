@@ -285,6 +285,161 @@ pre {
   padding: 1px 4px;
 }
 
+/* Inline reference to an ADR — used on canvas pages */
+.adr-inline-link {
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+  padding: 0 1px;
+}
+.adr-inline-link:hover {
+  text-decoration: underline;
+}
+
+/* ── ADR pages (rendered markdown) ───────────────────────────────────── */
+
+.adr-back-link,
+.adr-open-link,
+.adr-pager-link {
+  color: var(--accent);
+  font-weight: 590;
+  font-size: 13px;
+  text-decoration: none;
+}
+.adr-back-link:hover,
+.adr-open-link:hover,
+.adr-pager-link:hover {
+  text-decoration: underline;
+}
+.adr-pager-link {
+  max-width: 48%;
+  display: inline-block;
+}
+
+.adr-markdown {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.adr-markdown h1 {
+  font-size: 28px;
+  line-height: 34px;
+  margin: 0 0 8px;
+  font-weight: 590;
+}
+.adr-markdown h2 {
+  font-size: 20px;
+  line-height: 26px;
+  margin: 24px 0 8px;
+  font-weight: 590;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--stroke-subtle);
+}
+.adr-markdown h3 {
+  font-size: 16px;
+  line-height: 22px;
+  margin: 18px 0 6px;
+  font-weight: 590;
+}
+.adr-markdown h4 {
+  font-size: 14px;
+  line-height: 20px;
+  margin: 14px 0 4px;
+  font-weight: 590;
+  color: var(--text-secondary);
+}
+
+.adr-markdown p {
+  margin: 0 0 12px;
+}
+
+.adr-markdown ul,
+.adr-markdown ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+.adr-markdown li {
+  margin: 4px 0;
+}
+
+.adr-markdown a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.adr-markdown a:hover {
+  text-decoration: underline;
+}
+
+.adr-markdown code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--fill-tertiary);
+}
+
+.adr-markdown pre {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: var(--bg-chrome);
+  border: 1px solid var(--stroke-subtle);
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 18px;
+}
+.adr-markdown pre code {
+  padding: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.adr-markdown table {
+  border-collapse: collapse;
+  margin: 0 0 16px;
+  font-size: 13px;
+  display: block;
+  overflow-x: auto;
+}
+.adr-markdown th,
+.adr-markdown td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--stroke-subtle);
+}
+.adr-markdown th {
+  background: var(--fill-tertiary);
+  font-weight: 590;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--stroke);
+}
+.adr-markdown tr:hover td {
+  background: var(--fill-tertiary);
+}
+
+.adr-markdown blockquote {
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border-left: 3px solid var(--accent);
+  background: var(--fill-tertiary);
+  color: var(--text-secondary);
+}
+.adr-markdown blockquote p:last-child { margin-bottom: 0; }
+
+.adr-markdown hr {
+  margin: 24px 0;
+  border: 0;
+  border-top: 1px solid var(--stroke-subtle);
+}
+
+.adr-markdown strong {
+  font-weight: 590;
+  color: var(--text);
+}
+
 /* Count badge — small pill showing review count on review buttons */
 .review-count-badge {
   display: inline-flex;
