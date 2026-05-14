@@ -1,85 +1,168 @@
-import { useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 
 /**
  * Floating "Leave a review" widget backed by giscus (GitHub Discussions).
  * Visitors authenticate with their GitHub account through the iframe;
  * comments are posted as replies in the linked Discussion thread.
  *
- * Configuration is pulled from build-time env vars so the component is
- * portable across repos / forks. Defaults point at alxshtanko/policies-rfc.
+ * Architecture:
+ *   <ReviewProvider>          — owns panel state, renders the floating button
+ *   useReview().open(...)     — anywhere in the tree, request a panel open
+ *   <ReviewButton ... />      — inline button that calls open(...) for a section
+ *
+ * Threads are scoped per-(page, section) via the giscus `data-term`. Switching
+ * sections re-mounts the iframe so the right thread is shown.
  */
 
-const GISCUS_REPO          = import.meta.env.VITE_GISCUS_REPO          ?? 'alxshtanko/policies-rfc';
-const GISCUS_REPO_ID       = import.meta.env.VITE_GISCUS_REPO_ID       ?? 'R_kgDOSc3lIA';
-const GISCUS_CATEGORY      = import.meta.env.VITE_GISCUS_CATEGORY      ?? 'General';
-const GISCUS_CATEGORY_ID   = import.meta.env.VITE_GISCUS_CATEGORY_ID   ?? 'DIC_kwDOSc3lIM4C8_r1';
-const GISCUS_TERM          = import.meta.env.VITE_GISCUS_TERM          ?? 'policy-design-review';
+const GISCUS_REPO        = import.meta.env.VITE_GISCUS_REPO        ?? 'alxshtanko/policies-rfc';
+const GISCUS_REPO_ID     = import.meta.env.VITE_GISCUS_REPO_ID     ?? 'R_kgDOSc3lIA';
+const GISCUS_CATEGORY    = import.meta.env.VITE_GISCUS_CATEGORY    ?? 'General';
+const GISCUS_CATEGORY_ID = import.meta.env.VITE_GISCUS_CATEGORY_ID ?? 'DIC_kwDOSc3lIM4C8_r1';
+const TERM_PREFIX        = import.meta.env.VITE_GISCUS_TERM        ?? 'policy-review';
 
-export function FloatingReview() {
-  const [open, setOpen] = useState(false);
+export type ReviewTarget = { term: string; title: string; subtitle?: string };
+
+type Ctx = {
+  /**
+   * Open the review panel scoped to a section.
+   * Pass `term` as a stable kebab-case suffix (e.g. `integration:simulator`).
+   * `title` and `subtitle` are shown in the panel header.
+   */
+  open: (target: ReviewTarget) => void;
+  /** Open the panel scoped to the current page (no specific section). */
+  openGeneral: () => void;
+};
+
+const ReviewContext = createContext<Ctx>({ open: () => {}, openGeneral: () => {} });
+
+export function useReview() {
+  return useContext(ReviewContext);
+}
+
+export function ReviewProvider({ children }: { children: ReactNode }) {
+  const [target, setTarget] = useState<ReviewTarget | null>(null);
+
+  const open = useCallback((t: ReviewTarget) => setTarget(t), []);
+  const openGeneral = useCallback(() => {
+    const route = typeof window === 'undefined' ? '' : window.location.hash;
+    const page =
+      route === '#/integration' ? { key: 'integration', label: 'Integration design' }
+      : route === '#/data-model' ? { key: 'data-model',  label: 'PolicyService data model' }
+      : { key: 'home', label: 'Overview' };
+    setTarget({
+      term: `${page.key}:general`,
+      title: `Feedback — ${page.label}`,
+      subtitle: 'General comments on this page',
+    });
+  }, []);
 
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    if (!target) return;
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setTarget(null);
     window.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = '';
     };
-  }, [open]);
+  }, [target]);
 
   return (
-    <>
-      <button
-        type="button"
-        className="floating-review-btn"
-        onClick={() => setOpen(true)}
-        aria-label="Leave a review"
-        title="Leave a review"
-      >
-        <ChatIcon />
-        <span>Leave a review</span>
-      </button>
-
-      {open && (
+    <ReviewContext.Provider value={{ open, openGeneral }}>
+      {children}
+      <FloatingButton onClick={openGeneral} />
+      {target && (
         <>
-          <div className="floating-review-backdrop" onClick={() => setOpen(false)} />
-          <aside className="floating-review-panel" role="dialog" aria-label="Reviews">
+          <div className="floating-review-backdrop" onClick={() => setTarget(null)} />
+          <aside className="floating-review-panel" role="dialog" aria-label={target.title}>
             <header className="floating-review-header">
-              <div>
-                <div className="floating-review-title">Reviews</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div className="floating-review-title">{target.title}</div>
                 <div className="floating-review-sub">
-                  Sign in with GitHub to comment — posts to{' '}
+                  {target.subtitle ? `${target.subtitle} · ` : ''}
+                  Sign in with GitHub to comment.{' '}
                   <a
                     href={`https://github.com/${GISCUS_REPO}/discussions`}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {GISCUS_REPO} · Discussions
+                    All threads ↗
                   </a>
+                </div>
+                <div className="floating-review-term">
+                  thread: <code>{TERM_PREFIX}:{target.term}</code>
                 </div>
               </div>
               <button
                 type="button"
                 className="floating-review-close"
-                onClick={() => setOpen(false)}
+                onClick={() => setTarget(null)}
                 aria-label="Close"
               >
                 ✕
               </button>
             </header>
             <div className="floating-review-body">
-              <GiscusFrame />
+              {/* key forces a re-mount when the section changes — giscus
+                  doesn't support live re-config on the same iframe */}
+              <GiscusFrame key={target.term} term={`${TERM_PREFIX}:${target.term}`} />
             </div>
           </aside>
         </>
       )}
-    </>
+    </ReviewContext.Provider>
   );
 }
 
-function GiscusFrame() {
+function FloatingButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="floating-review-btn"
+      onClick={onClick}
+      aria-label="Leave a review on this page"
+      title="Leave a review on this page"
+    >
+      <ChatIcon />
+      <span>Leave a review</span>
+    </button>
+  );
+}
+
+/** Inline section-scoped review trigger; placed next to section headings. */
+export function ReviewButton({
+  term,
+  title,
+  subtitle,
+}: {
+  term: string;
+  title: string;
+  subtitle?: string;
+}) {
+  const { open } = useReview();
+  return (
+    <button
+      type="button"
+      className="review-section-btn"
+      onClick={() => open({ term, title, subtitle })}
+      aria-label={`Review: ${title}`}
+      title={`Review: ${title}`}
+    >
+      <ChatIcon size={12} />
+      <span>Review</span>
+    </button>
+  );
+}
+
+function GiscusFrame({ term }: { term: string }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -98,7 +181,7 @@ function GiscusFrame() {
       'data-category':          GISCUS_CATEGORY,
       'data-category-id':       GISCUS_CATEGORY_ID,
       'data-mapping':           'specific',
-      'data-term':              GISCUS_TERM,
+      'data-term':              term,
       'data-strict':            '0',
       'data-reactions-enabled': '1',
       'data-emit-metadata':     '0',
@@ -112,19 +195,18 @@ function GiscusFrame() {
     container.appendChild(script);
 
     return () => {
-      // On unmount or remount, drop the iframe so we don't accumulate frames.
       container.replaceChildren();
     };
-  }, []);
+  }, [term]);
 
   return <div ref={containerRef} className="floating-review-giscus" />;
 }
 
-function ChatIcon() {
+function ChatIcon({ size = 16 }: { size?: number }) {
   return (
     <svg
-      width="16"
-      height="16"
+      width={size}
+      height={size}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"

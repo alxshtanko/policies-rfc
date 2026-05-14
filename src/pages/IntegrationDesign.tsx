@@ -8,7 +8,6 @@ import {
   Divider,
   Grid,
   H1,
-  H2,
   Pill,
   Row,
   Select,
@@ -20,6 +19,7 @@ import {
   useCanvasState,
   useHostTheme,
 } from '@/canvas-ui';
+import { SectionHeading } from '@/components/SectionHeading';
 
 // ─── Domain data ─────────────────────────────────────────────────────────────
 
@@ -86,7 +86,13 @@ export default function IntegrationDesign() {
       <SummaryStats />
 
       <Stack gap={12}>
-        <H2>Service topology</H2>
+        <SectionHeading
+          term="integration:topology"
+          title="Service topology"
+          subtitle="Integration design"
+        >
+          Service topology
+        </SectionHeading>
         <Text tone="secondary">
           PolicyService is the authoritative store. Apps read via the SDK with a TTL cache. The bus
           tier is intentionally split: <Code>policy-changes</Code> on Azure ServiceBus uses
@@ -98,7 +104,13 @@ export default function IntegrationDesign() {
       </Stack>
 
       <Stack gap={12}>
-        <H2>Policy resolution simulator</H2>
+        <SectionHeading
+          term="integration:simulator"
+          title="Policy resolution simulator"
+          subtitle="Integration design"
+        >
+          Policy resolution simulator
+        </SectionHeading>
         <Text tone="secondary">
           Try the <Code>ium.mfa.enforcement_stage</Code> policy. Choose values at each level and a user
           type to see which level wins, whether the user is required, and what audit event is emitted.
@@ -107,12 +119,24 @@ export default function IntegrationDesign() {
       </Stack>
 
       <Stack gap={12}>
-        <H2>Hierarchy at a glance</H2>
+        <SectionHeading
+          term="integration:hierarchy"
+          title="Hierarchy at a glance"
+          subtitle="Integration design"
+        >
+          Hierarchy at a glance
+        </SectionHeading>
         <HierarchyTable />
       </Stack>
 
       <Stack gap={12}>
-        <H2>MFA enforcement stages</H2>
+        <SectionHeading
+          term="integration:stage-matrix"
+          title="MFA enforcement stages"
+          subtitle="Integration design"
+        >
+          MFA enforcement stages
+        </SectionHeading>
         <Text tone="secondary">
           Each stage covers a strictly larger set of user types than the one below. Stages 4–6 permit
           per-user opt-out.
@@ -121,7 +145,13 @@ export default function IntegrationDesign() {
       </Stack>
 
       <Stack gap={12}>
-        <H2>Lifecycle of a tenant override</H2>
+        <SectionHeading
+          term="integration:lifecycle"
+          title="Lifecycle of a tenant override"
+          subtitle="Integration design"
+        >
+          Lifecycle of a tenant override
+        </SectionHeading>
         <Text tone="secondary">
           What happens when a tenant admin changes <Code>ium.mfa.enforcement_stage</Code> from
           <Text as="span"> </Text><Code>AdminsOnly</Code> to <Code>EmployeesOptOut</Code>.

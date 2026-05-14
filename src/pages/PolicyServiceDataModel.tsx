@@ -8,7 +8,6 @@ import {
   Divider,
   Grid,
   H1,
-  H2,
   H3,
   Pill,
   Row,
@@ -20,6 +19,7 @@ import {
   useHostTheme,
   type HostTheme,
 } from '@/canvas-ui';
+import { SectionHeading } from '@/components/SectionHeading';
 
 // ─── Page root ────────────────────────────────────────────────────────────────
 
@@ -30,12 +30,16 @@ export default function PolicyServiceDataModel() {
       <SummaryStats />
 
       <Stack gap={12}>
-        <H2>Service overview</H2>
+        <SectionHeading term="data-model:overview" title="Service overview" subtitle="Data model">
+          Service overview
+        </SectionHeading>
         <ServiceOverview />
       </Stack>
 
       <Stack gap={12}>
-        <H2>Entity relationships</H2>
+        <SectionHeading term="data-model:er-diagram" title="Entity relationships" subtitle="Data model">
+          Entity relationships
+        </SectionHeading>
         <Text tone="secondary">
           Three tables in the <Code>policy</Code> schema: definitions (versioned, append-only),
           instances (one per scope, soft-archived on supersede), and a lock row that enforces
@@ -45,7 +49,9 @@ export default function PolicyServiceDataModel() {
       </Stack>
 
       <Stack gap={12}>
-        <H2>Tables</H2>
+        <SectionHeading term="data-model:tables" title="Tables" subtitle="Data model">
+          Tables
+        </SectionHeading>
         <Stack gap={16}>
           <PolicyDefinitionsCard />
           <PolicyInstancesCard />
@@ -54,7 +60,13 @@ export default function PolicyServiceDataModel() {
       </Stack>
 
       <Stack gap={12}>
-        <H2>Instance scope browser</H2>
+        <SectionHeading
+          term="data-model:scope-browser"
+          title="Instance scope browser"
+          subtitle="Data model"
+        >
+          Instance scope browser
+        </SectionHeading>
         <Text tone="secondary">
           Pick a level to see which scope columns are populated and which CHECK constraint enforces it.
           The sample row reflects a realistic record at that level.
@@ -63,7 +75,13 @@ export default function PolicyServiceDataModel() {
       </Stack>
 
       <Stack gap={12}>
-        <H2>Atomic upsert sequence</H2>
+        <SectionHeading
+          term="data-model:upsert"
+          title="Atomic upsert sequence"
+          subtitle="Data model"
+        >
+          Atomic upsert sequence
+        </SectionHeading>
         <Text tone="secondary">
           The <Code>policy.upsert_policy_instance(...)</Code> stored procedure is the only write path
           for instances. It guarantees single-active-instance per slot with ETag concurrency.
@@ -72,12 +90,16 @@ export default function PolicyServiceDataModel() {
       </Stack>
 
       <Stack gap={12}>
-        <H2>API surface</H2>
+        <SectionHeading term="data-model:api" title="API surface" subtitle="Data model">
+          API surface
+        </SectionHeading>
         <ApiSurface />
       </Stack>
 
       <Stack gap={12}>
-        <H2>Index strategy</H2>
+        <SectionHeading term="data-model:indexes" title="Index strategy" subtitle="Data model">
+          Index strategy
+        </SectionHeading>
         <IndexTable />
       </Stack>
 
