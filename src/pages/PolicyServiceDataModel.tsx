@@ -103,6 +103,66 @@ export default function PolicyServiceDataModel() {
         <IndexTable />
       </Stack>
 
+      <Stack gap={12}>
+        <SectionHeading term="data-model:targeting" title="Targeting filters" subtitle="Data model">
+          Targeting filters (ADR-008)
+        </SectionHeading>
+        <Text tone="secondary">
+          Orthogonal to the scope hierarchy: roles, environments, and actions are JSONB filters
+          on the instance row. The same instance can target "only admins in Enterprise Hub" without
+          creating a new definition or scope level.
+        </Text>
+        <TargetingFiltersTable />
+      </Stack>
+
+      <Stack gap={12}>
+        <SectionHeading term="data-model:lifecycle" title="Instance lifecycle" subtitle="Data model">
+          Instance lifecycle (ADR-010)
+        </SectionHeading>
+        <Text tone="secondary">
+          The <Code>status</Code> column now has five values. Drafts are invisible at evaluation
+          time, can be grouped into a <Code>policy_plan</Code> for atomic activation, and may
+          require approval before going Active depending on the definition.
+        </Text>
+        <LifecycleStateMachine />
+      </Stack>
+
+      <Stack gap={12}>
+        <SectionHeading term="data-model:exemptions" title="Exemption workflow" subtitle="Data model">
+          Exemption workflow (ADR-010)
+        </SectionHeading>
+        <Text tone="secondary">
+          A separate entity tracks self-service exemption requests through approval. Approved
+          requests materialize a User or Group instance with <Code>expires_at</Code> set to the
+          requested value; the linked <Code>exemption_request_id</Code> on the instance preserves
+          the audit chain.
+        </Text>
+        <ExemptionStateMachine />
+      </Stack>
+
+      <Stack gap={12}>
+        <SectionHeading term="data-model:catalogs" title="Reference catalogs" subtitle="Data model">
+          Reference catalogs (ADR-009)
+        </SectionHeading>
+        <Text tone="secondary">
+          Platform-managed lookup tables that composite policies reference. Adding a new factor or
+          provider is a Flyway row insert; no schema churn.
+        </Text>
+        <CatalogTables />
+      </Stack>
+
+      <Stack gap={12}>
+        <SectionHeading term="data-model:dependencies" title="Policy dependencies" subtitle="Data model">
+          Policy dependencies (ADR-009)
+        </SectionHeading>
+        <Text tone="secondary">
+          Declarative relations between definitions used by the admin UI to grey out controls
+          superseded by an active parent (e.g. <Code>SsoOnly</Code> invalidates account-linking
+          toggles) and to enforce write-time prerequisites.
+        </Text>
+        <DependencyExamples />
+      </Stack>
+
       <Callout tone="info" title="Source of truth">
         Full DDL, stored procedure body, and migration order in
         <Text as="span"> </Text><Code>ADR-007 Data Models & Schema</Code>. REST contract in
@@ -119,8 +179,14 @@ function Header() {
     <Stack gap={6}>
       <H1>PolicyService — Data Model & API</H1>
       <Text tone="secondary">
-        Authoritative store for policy definitions and L0–L3 instances. PostgreSQL-backed,
+        Authoritative store for policy definitions and instances across six scope levels
+        (<Code>Platform</Code> · <Code>Org</Code> · <Code>Tenant</Code> · <Code>App</Code> ·
+        <Text as="span"> </Text><Code>Group</Code> · <Code>User</Code>). PostgreSQL-backed,
         ServiceBus + Kafka eventing, deployed as the <Code>policy-service</Code> microservice.
+      </Text>
+      <Text size="small" tone="tertiary">
+        Schema reflects ADR-007 + the PRD-driven extensions in ADR-008 (scope hierarchy),
+        ADR-009 (value composition + side effects), and ADR-010 (lifecycle + exemption workflow).
       </Text>
     </Stack>
   );
@@ -129,10 +195,10 @@ function Header() {
 function SummaryStats() {
   return (
     <Grid columns={4} gap={16}>
-      <Stat value="3"  label="Tables" />
-      <Stat value="7"  label="Index strategies" />
-      <Stat value="25+" label="REST endpoints" />
-      <Stat value="6"  label="Auth scopes" />
+      <Stat value="6"   label="Scope levels" tone="info" />
+      <Stat value="10"  label="Core tables" />
+      <Stat value="45+" label="REST endpoints" />
+      <Stat value="9"   label="Auth scopes" />
     </Grid>
   );
 }
@@ -217,12 +283,12 @@ type ErTable = {
 function ERDiagram() {
   const theme = useHostTheme();
 
-  const W = 880;
-  const H = 420;
+  const W = 900;
+  const H = 440;
 
   const tables: ErTable[] = [
     {
-      id: 'pd', x: 30, y: 30, w: 280,
+      id: 'pd', x: 30, y: 30, w: 290,
       title: 'policy_definitions',
       rows: [
         { name: 'id', type: 'UUID', flag: 'PK' },
@@ -230,37 +296,47 @@ function ERDiagram() {
         { name: 'version', type: 'INT' },
         { name: 'value_type', type: 'TEXT' },
         { name: 'allowed_values', type: 'JSONB' },
+        { name: 'value_schema', type: 'JSONB' },
         { name: 'default_value', type: 'TEXT' },
         { name: 'scope', type: 'TEXT' },
-        { name: 'l1/l2/l3_allowed', type: 'BOOL' },
-        { name: 'opt_out_eligible_values', type: 'JSONB' },
-        { name: 'is_ordered_enum', type: 'BOOL' },
+        { name: 'org/tenant/app/group/user_allowed', type: 'BOOL' },
+        { name: 'relaxation_allowed_at', type: 'JSONB' },
+        { name: 'applicable_roles', type: 'JSONB' },
+        { name: 'applicable_environments', type: 'JSONB' },
+        { name: 'opt_in/out_allowed', type: 'BOOL' },
+        { name: 'requires_approval', type: 'BOOL' },
+        { name: 'approval_routing', type: 'JSONB' },
+        { name: 'owner_org_required', type: 'BOOL' },
         { name: 'is_active', type: 'BOOL' },
         { name: 'superseded_by', type: 'UUID', flag: 'FK self' },
       ],
     },
     {
-      id: 'pi', x: 340, y: 30, w: 280,
+      id: 'pi', x: 350, y: 30, w: 290,
       title: 'policy_instances',
       rows: [
         { name: 'id', type: 'UUID', flag: 'PK' },
         { name: 'policy_definition_id', type: 'UUID', flag: 'FK' },
         { name: 'definition_version', type: 'INT' },
         { name: 'level', type: 'TEXT' },
+        { name: 'org_id', type: 'INT?' },
         { name: 'tenant_id', type: 'INT?' },
         { name: 'app_id', type: 'TEXT?' },
+        { name: 'group_id', type: 'UUID?', flag: 'FK' },
         { name: 'user_id', type: 'INT?' },
         { name: 'value', type: 'TEXT' },
+        { name: 'applies_to_roles', type: 'JSONB?' },
+        { name: 'applies_to_environments', type: 'JSONB?' },
+        { name: 'applies_to_actions', type: 'JSONB?' },
         { name: 'effective_at', type: 'TIMESTAMPTZ' },
         { name: 'expires_at', type: 'TIMESTAMPTZ?' },
-        { name: 'override_reason / approved_by', type: 'TEXT?' },
-        { name: 'ticket_ref', type: 'TEXT?' },
         { name: 'status', type: 'TEXT' },
+        { name: 'exemption_request_id', type: 'UUID?', flag: 'FK' },
         { name: 'superseded_by', type: 'UUID', flag: 'FK self' },
       ],
     },
     {
-      id: 'pl', x: 650, y: 30, w: 220,
+      id: 'pl', x: 670, y: 30, w: 200,
       title: 'policy_instance_lock',
       rows: [
         { name: '(definition+level+scope)', type: '', flag: 'PK' },
@@ -394,21 +470,29 @@ function PolicyDefinitionsCard() {
           headers={['Column', 'Type', 'Notes']}
           columnAlign={['left', 'left', 'left']}
           rows={[
-            ['id',                       'UUID PK',                       'gen_random_uuid()'],
-            ['key',                      'TEXT',                          'stable string e.g. policy.mfa.enforcement_stage'],
-            ['version',                  'INT',                           'starts at 1; bumped on breaking change'],
-            ['value_type',               'TEXT CHECK',                    'Enum | Bool | Int | String | Json'],
-            ['allowed_values',           'JSONB',                         'null = unconstrained'],
-            ['default_value',            'TEXT',                          'served when no instance exists'],
-            ['scope',                    'TEXT CHECK',                    'Global | PerTenant | PerApp | PerUser'],
-            ['l1_allowed / l2_allowed / l3_allowed', 'BOOLEAN',           'which levels may write instances'],
-            ['l1_relaxation_allowed',    'BOOLEAN',                       'rare; tenants relaxing the L0 default'],
-            ['opt_in_allowed / opt_out_allowed', 'BOOLEAN',               'user-driven L3 flows'],
-            ['opt_out_eligible_values',  'JSONB',                         'enum values at which opt-out is permitted'],
-            ['is_ordered_enum',          'BOOLEAN',                       'enables "max wins" resolution semantics'],
-            ['is_active',                'BOOLEAN',                       'false after supersession; never deleted'],
-            ['superseded_by',            'UUID FK -> policy_definitions', 'links breaking-change history'],
-            ['created_by / created_at / updated_at', 'TEXT / TIMESTAMPTZ', 'audit columns'],
+            ['id',                                      'UUID PK',                       'gen_random_uuid()'],
+            ['key',                                     'TEXT',                          'stable string e.g. policy.mfa.enforcement_stage'],
+            ['version',                                 'INT',                           'starts at 1; bumped on breaking change'],
+            ['value_type',                              'TEXT CHECK',                    'Enum | Bool | Int | String | Json'],
+            ['allowed_values',                          'JSONB',                         'null = unconstrained'],
+            ['value_schema',                            'JSONB',                         'JSON Schema; only for value_type=Json (ADR-009)'],
+            ['default_value',                           'TEXT',                          'served when no instance exists'],
+            ['scope',                                   'TEXT CHECK',                    'Global | PerOrg | PerTenant | PerApp | PerGroup | PerUser'],
+            ['platform_allowed (implicit)',             '—',                             'platform is always allowed; not a column'],
+            ['org_allowed / tenant_allowed',            'BOOLEAN',                       'which levels may write instances'],
+            ['app_allowed / group_allowed / user_allowed', 'BOOLEAN',                    'continued'],
+            ['relaxation_allowed_at',                   'JSONB',                         'list of levels permitted to relax their parent, e.g. ["Org","Tenant"] (ADR-008)'],
+            ['applicable_roles',                        'JSONB',                         'null = any role; list of role IDs otherwise (ADR-008)'],
+            ['applicable_environments',                 'JSONB',                         'null = any env; ["Monolith","EnterpriseHub","Mobile",...] (ADR-008)'],
+            ['opt_in_allowed / opt_out_allowed',        'BOOLEAN',                       'user-driven User flows'],
+            ['opt_out_eligible_values',                 'JSONB',                         'enum values at which opt-out is permitted'],
+            ['is_ordered_enum',                         'BOOLEAN',                       'enables "max wins" resolution semantics'],
+            ['requires_approval',                       'BOOLEAN',                       'instances start as PendingApproval (ADR-010)'],
+            ['approval_routing',                        'JSONB',                         'approver rule + sources (ADR-010)'],
+            ['owner_org_required',                      'BOOLEAN',                       'managed-identity ownership check (ADR-009)'],
+            ['is_active',                               'BOOLEAN',                       'false after supersession; never deleted'],
+            ['superseded_by',                           'UUID FK -> policy_definitions', 'links breaking-change history'],
+            ['created_by / created_at / updated_at',    'TEXT / TIMESTAMPTZ',            'audit columns'],
           ]}
         />
       </CardBody>
@@ -428,37 +512,40 @@ function PolicyInstancesCard() {
           headers={['Column', 'Type', 'Notes']}
           columnAlign={['left', 'left', 'left']}
           rows={[
-            ['id',                                'UUID PK',                                          ''],
-            ['policy_definition_id',              'UUID FK -> policy_definitions',                    ''],
-            ['definition_version',                'INT',                                              'snapshot at write time'],
-            ['level',                             "TEXT CHECK ('L0','L1','L2','L3')",                ''],
-            ['tenant_id',                         'INT (nullable)',                                   'set for L1, L2'],
-            ['app_id',                            'TEXT (nullable)',                                  'set for L2'],
-            ['user_id',                           'INT (nullable)',                                   'set for L3'],
-            ['value',                             'TEXT',                                             'string-encoded; SDK deserializes per value_type'],
-            ['effective_at / expires_at',         'TIMESTAMPTZ',                                      'expires_at NULL for permanent rows'],
-            ['override_reason / approved_by',     'TEXT (nullable)',                                  'required for exceptions'],
-            ['ticket_ref',                        'TEXT (nullable)',                                  'mandatory when approved_by is set'],
-            ['status',                            "TEXT CHECK ('Active','Revoked','Expired')",       'never DELETE'],
-            ['superseded_by',                     'UUID FK -> policy_instances (self)',               'links replacement chain'],
-            ['revoked_at / revoked_by',           'TIMESTAMPTZ / TEXT',                               'populated on supersede'],
-            ['created_by / created_at / updated_at', 'TEXT / TIMESTAMPTZ',                            'audit columns'],
+            ['id',                                   'UUID PK',                                          ''],
+            ['policy_definition_id',                 'UUID FK -> policy_definitions',                    ''],
+            ['definition_version',                   'INT',                                              'snapshot at write time'],
+            ['level',                                "TEXT CHECK ('Platform','Org','Tenant','App','Group','User')", '(ADR-008)'],
+            ['org_id',                               'INT (nullable)',                                   'set for Org'],
+            ['tenant_id',                            'INT (nullable)',                                   'set for Tenant, App, Group'],
+            ['app_id',                               'TEXT (nullable)',                                  'set for App'],
+            ['group_id',                             'UUID FK -> policy_group (nullable)',               'set for Group (ADR-008)'],
+            ['user_id',                              'INT (nullable)',                                   'set for User'],
+            ['value',                                'TEXT',                                             'string-encoded; SDK deserializes per value_type'],
+            ['applies_to_roles',                     'JSONB (nullable)',                                 'null = any role (ADR-008)'],
+            ['applies_to_environments',              'JSONB (nullable)',                                 'null = any environment (ADR-008)'],
+            ['applies_to_actions',                   'JSONB (nullable)',                                 'step-up MFA per action (ADR-009)'],
+            ['effective_at / expires_at',            'TIMESTAMPTZ',                                      'expires_at NULL for permanent rows'],
+            ['override_reason / approved_by',        'TEXT (nullable)',                                  'required for exceptions'],
+            ['ticket_ref',                           'TEXT (nullable)',                                  'mandatory when approved_by is set'],
+            ['status',                               "TEXT CHECK ('Draft','PendingApproval','Active','Revoked','Expired')", '5-state lifecycle (ADR-010)'],
+            ['superseded_by',                        'UUID FK -> policy_instances (self)',               'links replacement chain'],
+            ['revoked_at / revoked_by',              'TIMESTAMPTZ / TEXT',                               'populated on supersede'],
+            ['exemption_request_id',                 'UUID FK (nullable)',                               'when materialized from an exemption_request (ADR-010)'],
+            ['created_by / created_at / updated_at', 'TEXT / TIMESTAMPTZ',                               'audit columns'],
           ]}
         />
         <div style={{ padding: 12 }}>
-          <Text size="small" tone="secondary" weight="semibold">CHECK constraints</Text>
+          <Text size="small" tone="secondary" weight="semibold">CHECK constraints (ADR-008)</Text>
           <Text size="small">
-            <Code>chk_l0_scope</Code> — L0 row has tenant/app/user all NULL.
+            <Code>chk_level_scope</Code> enforces the correct scope columns per level:
           </Text>
-          <Text size="small">
-            <Code>chk_l1_scope</Code> — L1 row has tenant_id set, app/user NULL.
-          </Text>
-          <Text size="small">
-            <Code>chk_l2_scope</Code> — L2 row has tenant_id and app_id set, user NULL.
-          </Text>
-          <Text size="small">
-            <Code>chk_l3_scope</Code> — L3 row has user_id set.
-          </Text>
+          <Text size="small">• <Code>Platform</Code> — all scope columns NULL</Text>
+          <Text size="small">• <Code>Org</Code> — only <Code>org_id</Code> set</Text>
+          <Text size="small">• <Code>Tenant</Code> — only <Code>tenant_id</Code> set</Text>
+          <Text size="small">• <Code>App</Code> — <Code>tenant_id</Code> and <Code>app_id</Code> set, user/group NULL</Text>
+          <Text size="small">• <Code>Group</Code> — <Code>tenant_id</Code> and <Code>group_id</Code> set, user/app NULL</Text>
+          <Text size="small">• <Code>User</Code> — <Code>user_id</Code> set, app/group NULL</Text>
           <Text size="small">
             <Code>chk_exception_ticket</Code> — if <Code>approved_by</Code> is set, <Code>ticket_ref</Code> must be set.
           </Text>
@@ -505,14 +592,17 @@ function PolicyInstanceLockCard() {
 
 // ─── Instance browser ────────────────────────────────────────────────────────
 
-type Level = 'L0' | 'L1' | 'L2' | 'L3';
+type Level = 'Platform' | 'Org' | 'Tenant' | 'App' | 'Group' | 'User';
+const ALL_LEVELS: Level[] = ['Platform', 'Org', 'Tenant', 'App', 'Group', 'User'];
 
 type RejectionTone = 'warning' | 'danger' | 'info';
 
 type LevelEntry = {
   description: string;
+  orgId: number | null;
   tenant: string | null;
   appId: string | null;
+  groupId: string | null;
   userId: number | null;
   check: string;
   scope: string;
@@ -528,74 +618,127 @@ type LevelEntry = {
 };
 
 const LEVEL_INFO: Record<Level, LevelEntry> = {
-  L0: {
-    description: 'Platform default. Exactly one Active per definition.',
-    tenant: null, appId: null, userId: null,
-    check: 'chk_l0_scope — all scope columns NULL',
+  Platform: {
+    description: 'Platform default. Exactly one Active per definition; rarely written outside Flyway migrations.',
+    orgId: null, tenant: null, appId: null, groupId: null, userId: null,
+    check: 'chk_level_scope — all scope columns NULL',
     scope: 'Global',
     scopeWriter: 'policy:admin (Platform Ops)',
     scopeReader: 'policy:read',
     exampleValue: 'Disabled',
     rejections: [
-      { scenario: 'Definition is deprecated',              code: '410',  tone: 'warning' },
-      { scenario: 'Value not in allowed_values',           code: '400',  tone: 'info' },
-      { scenario: 'Caller lacks policy:admin scope',       code: '403',  tone: 'danger' },
-      { scenario: 'Stale ETag (concurrent platform edit)', code: '409',  tone: 'warning' },
+      { scenario: 'Definition is deprecated',              code: '410', tone: 'warning' },
+      { scenario: 'Value not in allowed_values',           code: '400', tone: 'info' },
+      { scenario: 'Caller lacks policy:admin scope',       code: '403', tone: 'danger' },
+      { scenario: 'Stale ETag (concurrent platform edit)', code: '409', tone: 'warning' },
     ],
     overriddenBy: [
-      { label: 'L1 — Tenant',  tone: 'info',    detail: 'Tenant Admin tightens via PUT /tenants/{id}/policies/{key}.' },
-      { label: 'L2 — App',     tone: 'info',    detail: 'App tightens via PUT /apps/{appId}/... or in-process IPolicyOverrideProvider.' },
-      { label: 'L3 — User',    tone: 'info',    detail: 'User toggles via POST /me/policies/{key}/opt-out (when eligible).' },
-      { label: 'Operator',     tone: 'warning', detail: 'Platform Ops can supersede via /admin/exceptions targeting L0 — extremely rare; usually a Flyway-managed update.' },
+      { label: 'Org',      tone: 'info',    detail: 'Franchise admins tighten across all owned tenants via PUT /orgs/{id}/policies/{key}.' },
+      { label: 'Tenant',   tone: 'info',    detail: 'Tenant admin tightens via PUT /tenants/{id}/policies/{key}.' },
+      { label: 'App',      tone: 'info',    detail: 'App tightens via PUT /apps/{appId}/... or in-process IPolicyOverrideProvider.' },
+      { label: 'Group',    tone: 'info',    detail: 'Tenant admins can grant or restrict for a group via PUT /tenants/{tid}/groups/{gid}/policies/{key}.' },
+      { label: 'User',     tone: 'info',    detail: 'User toggles via POST /me/policies/{key}/opt-out (when eligible).' },
+      { label: 'Operator', tone: 'warning', detail: 'Platform Ops can supersede via /admin/exceptions — extremely rare; usually a Flyway-managed update.' },
     ],
     overrides: [
-      { label: '(ceiling)', detail: 'L0 is the platform default. Nothing below it.' },
+      { label: '(ceiling)', detail: 'Platform is the global default. Nothing above it.' },
     ],
     exception: {
       available: false,
       summary:
-        'L0 itself does not have an emergency-exception path — deviations live at L1/L2/L3 so that the platform default remains intact and auditable. Real L0 changes flow through Flyway migrations.',
+        'Platform level itself does not have an emergency-exception path — deviations live at Org / Tenant / App / Group / User so the platform default remains intact and auditable. Real Platform changes flow through Flyway migrations.',
     },
     concurrency: [
       'Standard ETag via policy_instance_lock.version.',
       'Writes are extremely rare and deployment-driven; conflicts are essentially impossible.',
-      'L0 instances are seeded by V*__policy_*.sql migrations; new definitions bootstrap their L0 row in the same migration.',
+      'Platform instances are seeded by V*__policy_*.sql migrations; new definitions bootstrap their Platform row in the same migration.',
     ],
-    lifecycle: 'Active → Revoked only when the definition is superseded (definition_version bumps). L0 rows are never Expired.',
+    lifecycle: 'Active → Revoked only when the definition is superseded (definition_version bumps). Platform rows are never Expired.',
   },
-  L1: {
-    description: 'Tenant override. One Active per (tenant, definition).',
-    tenant: '12345', appId: null, userId: null,
-    check: 'chk_l1_scope — tenant_id set, app_id / user_id NULL',
-    scope: 'PerTenant',
-    scopeWriter: 'policy:write:l1 (Tenant Admin)',
-    scopeReader: 'policy:read (same tenant only)',
-    exampleValue: 'EmployeesOptOut',
+  Org: {
+    description: 'Franchise / parent-company override. Applies to every Tenant under the Org unless overridden lower.',
+    orgId: 42, tenant: null, appId: null, groupId: null, userId: null,
+    check: 'chk_level_scope — only org_id is set',
+    scope: 'PerOrg',
+    scopeWriter: 'policy:write:org (Org Admin)',
+    scopeReader: 'policy:read (same org only)',
+    exampleValue: 'AdminsAndPrivileged',
     rejections: [
-      { scenario: 'Value would relax L0 and l1_relaxation_allowed = false', code: '422', tone: 'warning' },
-      { scenario: 'Definition has l1_allowed = false',                       code: '403', tone: 'danger'  },
-      { scenario: 'Tenant ID in path mismatches token claim',                code: '403', tone: 'danger'  },
-      { scenario: 'Value not in allowed_values',                             code: '400', tone: 'info'    },
-      { scenario: 'Stale ETag (concurrent admin edit)',                      code: '409', tone: 'warning' },
+      { scenario: 'Value would relax Platform and relaxation_allowed_at does not include Org', code: '422', tone: 'warning' },
+      { scenario: 'Definition has org_allowed = false',                  code: '403', tone: 'danger' },
+      { scenario: 'Org ID in path mismatches token claim',                code: '403', tone: 'danger' },
+      { scenario: 'Value not in allowed_values',                          code: '400', tone: 'info' },
+      { scenario: 'Stale ETag',                                           code: '409', tone: 'warning' },
     ],
     overriddenBy: [
-      { label: 'L2 — App',     tone: 'info',    detail: 'App may tighten further via code override or DB row.' },
-      { label: 'L3 — User',    tone: 'info',    detail: 'Eligible users can opt-out per L3 rules.' },
-      { label: 'Operator',     tone: 'warning', detail: 'Platform Ops may grant a time-bounded L1 exception (e.g. relax during tenant migration) via /admin/exceptions.' },
+      { label: 'Tenant', tone: 'info',    detail: 'Any owned tenant can tighten further for itself.' },
+      { label: 'App',    tone: 'info',    detail: 'Apps under a tenant can tighten further.' },
+      { label: 'Group',  tone: 'info',    detail: 'Group-scoped exemptions narrow the audience.' },
+      { label: 'User',   tone: 'info',    detail: 'Eligible users may opt-out.' },
+      { label: 'Operator', tone: 'warning', detail: 'Platform Ops can supersede via /admin/exceptions targeting Org.' },
     ],
     overrides: [
-      { label: 'L0 — Platform default', detail: 'L1 supersedes L0 for this tenant whenever stageIdx(L1) > stageIdx(L0).' },
+      { label: 'Platform', detail: 'Org instance supersedes the Platform default for every tenant in the org.' },
     ],
     exception: {
       available: true,
       summary:
-        'Platform Ops can create a time-bounded L1 exception that bypasses normal "tighten-only" validation (e.g. relax MFA for a migrating tenant). Mandatory ticket_ref + expires_at. Auto-revoked by the expiry job; audit-tagged distinctly from normal overrides.',
+        'Platform Ops can grant a time-bounded Org-level exception (rare). Used when a whole franchise needs a relaxation while merging entities or migrating identity providers.',
       sample: `POST /admin/exceptions
 Authorization: Bearer <ops-token policy:admin>
 
 {
   "policyKey":   "policy.mfa.enforcement_stage",
-  "targetLevel": "L1",
+  "targetLevel": "Org",
+  "orgId":       42,
+  "value":       "Disabled",
+  "reason":      "Org-wide identity migration in flight",
+  "expiresAt":   "2026-06-30T23:59:59Z",
+  "approvedBy":  "ops-user@example.com",
+  "ticketRef":   "OPS-6210"
+}`,
+    },
+    concurrency: [
+      'ETag via policy_instance_lock; same idempotency rules as Tenant level.',
+      'Org admins may be small in number — concurrent edits are uncommon.',
+    ],
+    lifecycle: 'Active → Revoked (on supersede or DELETE) or Expired (background job).',
+  },
+  Tenant: {
+    description: 'Tenant override. The most common configuration level. One Active per (tenant, definition).',
+    orgId: null, tenant: '12345', appId: null, groupId: null, userId: null,
+    check: 'chk_level_scope — only tenant_id is set',
+    scope: 'PerTenant',
+    scopeWriter: 'policy:write:tenant (Tenant Admin)',
+    scopeReader: 'policy:read (same tenant only)',
+    exampleValue: 'EmployeesOptOut',
+    rejections: [
+      { scenario: 'Value would relax Org/Platform and relaxation not permitted', code: '422', tone: 'warning' },
+      { scenario: 'Definition has tenant_allowed = false',          code: '403', tone: 'danger' },
+      { scenario: 'Tenant ID in path mismatches token claim',        code: '403', tone: 'danger' },
+      { scenario: 'Value not in allowed_values',                     code: '400', tone: 'info' },
+      { scenario: 'Stale ETag (concurrent admin edit)',              code: '409', tone: 'warning' },
+    ],
+    overriddenBy: [
+      { label: 'App',    tone: 'info',    detail: 'App may tighten further via code override or DB row.' },
+      { label: 'Group',  tone: 'info',    detail: 'Group-scoped exemptions narrow the audience.' },
+      { label: 'User',   tone: 'info',    detail: 'Eligible users can opt-out per definition rules.' },
+      { label: 'Operator', tone: 'warning', detail: 'Platform Ops may grant a time-bounded Tenant exception via /admin/exceptions.' },
+    ],
+    overrides: [
+      { label: 'Org',      detail: 'Tenant supersedes Org for itself, within definition constraints.' },
+      { label: 'Platform', detail: 'By transitivity when no Org instance exists.' },
+    ],
+    exception: {
+      available: true,
+      summary:
+        'Platform Ops can create a time-bounded Tenant exception that bypasses normal "tighten-only" validation (e.g. relax MFA for a migrating tenant). Mandatory ticket_ref + expires_at.',
+      sample: `POST /admin/exceptions
+Authorization: Bearer <ops-token policy:admin>
+
+{
+  "policyKey":   "policy.mfa.enforcement_stage",
+  "targetLevel": "Tenant",
   "tenantId":    12345,
   "value":       "Disabled",
   "reason":      "Tenant migration — MFA temporarily suspended",
@@ -612,28 +755,30 @@ Authorization: Bearer <ops-token policy:admin>
     lifecycle:
       'Active → Revoked (on supersede or DELETE) or Expired (background job when expires_at passes). All transitions emit audit events; rows are never hard-deleted.',
   },
-  L2: {
+  App: {
     description: 'Application override. DB-stored rows live here; in-process code overrides exist alongside but are not persisted.',
-    tenant: '12345', appId: 'mfa-service', userId: null,
-    check: 'chk_l2_scope — tenant_id and app_id set, user_id NULL',
+    orgId: null, tenant: '12345', appId: 'mfa-service', groupId: null, userId: null,
+    check: 'chk_level_scope — tenant_id and app_id are set',
     scope: 'PerApp',
-    scopeWriter: 'policy:write:l2 (service account whose sub matches app_id)',
+    scopeWriter: 'policy:write:app (service account whose sub matches app_id)',
     scopeReader: 'policy:read',
     exampleValue: 'AdminsAndPrivileged',
     rejections: [
-      { scenario: 'Value would relax L1 for this tenant',                    code: '422', tone: 'warning' },
-      { scenario: 'Definition has l2_allowed = false',                       code: '403', tone: 'danger'  },
-      { scenario: 'Token sub does not match path appId (cross-app write)',   code: '403', tone: 'danger'  },
-      { scenario: 'Definition value_type mismatch (e.g. enum vs json)',      code: '400', tone: 'info'    },
-      { scenario: 'Stale ETag',                                              code: '409', tone: 'warning' },
+      { scenario: 'Value would relax Tenant for this app',                  code: '422', tone: 'warning' },
+      { scenario: 'Definition has app_allowed = false',                     code: '403', tone: 'danger' },
+      { scenario: 'Token sub does not match path appId (cross-app write)',  code: '403', tone: 'danger' },
+      { scenario: 'Definition value_type mismatch (e.g. enum vs json)',     code: '400', tone: 'info' },
+      { scenario: 'Stale ETag',                                             code: '409', tone: 'warning' },
     ],
     overriddenBy: [
-      { label: 'L3 — User',  tone: 'info',    detail: 'User opt-out applies on top of L2 when eligible.' },
-      { label: 'Operator',   tone: 'warning', detail: 'Platform Ops can override per (app, tenant) for incident response.' },
+      { label: 'Group',    tone: 'info',    detail: 'Group exemption applies on top of App when the user is in the group.' },
+      { label: 'User',     tone: 'info',    detail: 'User opt-out applies on top of App when eligible.' },
+      { label: 'Operator', tone: 'warning', detail: 'Platform Ops can override per (app, tenant) for incident response.' },
     ],
     overrides: [
-      { label: 'L1 — Tenant', detail: 'App may not relax L1; only tighten further.' },
-      { label: 'L0 — Default', detail: 'By transitivity — when no L1 exists, L2 tightens against L0.' },
+      { label: 'Tenant',   detail: 'App may not relax Tenant; only tighten further.' },
+      { label: 'Org',      detail: 'By transitivity.' },
+      { label: 'Platform', detail: 'By transitivity.' },
     ],
     exception: {
       available: true,
@@ -644,7 +789,7 @@ Authorization: Bearer <ops-token policy:admin>
 
 {
   "policyKey":   "policy.mfa.enforcement_stage",
-  "targetLevel": "L2",
+  "targetLevel": "App",
   "tenantId":    12345,
   "appId":       "mfa-service",
   "value":       "AdminsOnly",
@@ -662,40 +807,92 @@ Authorization: Bearer <ops-token policy:admin>
     lifecycle:
       'Active → Revoked (on supersede). DB-backed rows can also Expire. Code overrides are versioned by app deployment, not by lifecycle state.',
   },
-  L3: {
-    description: 'User opt-out or opt-in. Always scoped to user_id; almost always time-bounded.',
-    tenant: null, appId: null, userId: 99887,
-    check: 'chk_l3_scope — user_id set',
-    scope: 'PerUser',
-    scopeWriter: 'policy:write:l3 (the user themselves)',
-    scopeReader: 'policy:read (self)',
-    exampleValue: 'Disabled',
+  Group: {
+    description: 'Group exemption — applies only to users in the named group. Most exemption-request approvals land here.',
+    orgId: null, tenant: '12345', appId: null, groupId: 'a1b2-...sales-team', userId: null,
+    check: 'chk_level_scope — tenant_id and group_id are set',
+    scope: 'PerGroup',
+    scopeWriter: 'policy:write:group (Tenant Admin or exemption approver)',
+    scopeReader: 'policy:read (same tenant only)',
+    exampleValue: 'AdminsAndPrivileged',
     rejections: [
-      { scenario: 'Resolved stage not in opt_out_eligible_values',                       code: '422', tone: 'warning' },
-      { scenario: 'User type not affected at current stage (nothing to opt out of)',     code: '422', tone: 'warning' },
-      { scenario: 'Definition has opt_out_allowed = false',                              code: '403', tone: 'danger'  },
-      { scenario: 'expires_at > 180 days (self-service maximum)',                        code: '422', tone: 'warning' },
-      { scenario: 'user_id from token does not match path :userId',                      code: '403', tone: 'danger'  },
-      { scenario: 'Rate limit exceeded (10 req/min per user)',                           code: '429', tone: 'info'    },
+      { scenario: 'Definition has group_allowed = false',                code: '403', tone: 'danger' },
+      { scenario: 'Group does not belong to path tenantId',              code: '403', tone: 'danger' },
+      { scenario: 'Value would relax Platform/Org/Tenant impermissibly', code: '422', tone: 'warning' },
+      { scenario: 'Value not in allowed_values',                         code: '400', tone: 'info' },
+      { scenario: 'Stale ETag',                                          code: '409', tone: 'warning' },
     ],
     overriddenBy: [
-      { label: 'Operator', tone: 'warning', detail: 'Platform Ops can revoke a user\'s L3 row or override it with an emergency exception (e.g. revoke a previously granted opt-out).' },
+      { label: 'User',     tone: 'info',    detail: 'Individual opt-out still wins for that user.' },
+      { label: 'Operator', tone: 'warning', detail: 'Platform Ops can grant a Group-level exception via /admin/exceptions.' },
     ],
     overrides: [
-      { label: 'L2 — App',     detail: 'For this user only, L3 supersedes the app floor when opt-out is permitted.' },
-      { label: 'L1 — Tenant',  detail: 'By transitivity.' },
-      { label: 'L0 — Default', detail: 'By transitivity.' },
+      { label: 'App',      detail: 'Applies to all users in the group regardless of which app they\'re using.' },
+      { label: 'Tenant',   detail: 'By transitivity.' },
+      { label: 'Org',      detail: 'By transitivity.' },
+      { label: 'Platform', detail: 'By transitivity.' },
     ],
     exception: {
       available: true,
       summary:
-        'Platform Ops can grant an emergency L3 opt-out that bypasses opt_out_eligible_values and applicable_user_types checks (e.g. regulator-mandated exception, accessibility accommodation). Mandatory ticket_ref and expires_at — never permanent.',
+        'Approved exemption requests targeting a Group materialize as a Group-level PolicyInstance with expires_at = requested value. Ops can also create one directly via /admin/exceptions for incident response.',
+      sample: `# Most common path: approver action on an exemption_request
+POST /exemption-requests/{id}/approve
+{ "decision_notes": "Approved for 90 days, see ticket SEC-411" }
+
+# Creates a Group instance internally:
+INSERT INTO policy.policy_instances (
+  level, tenant_id, group_id, value, expires_at,
+  approved_by, ticket_ref, status, ...
+) VALUES (
+  'Group', 12345, 'a1b2-...sales-team', 'AdminsAndPrivileged',
+  '2026-08-13T00:00:00Z', 'security@example.com', 'SEC-411',
+  'Active', ...
+);`,
+    },
+    concurrency: [
+      'Approval-driven; an in-flight exemption_request that already resulted in an Active Group instance returns 409 on a second approve.',
+      'Group membership is sourced via IPolicyGroupSource (SDK) or POST /tenants/{tid}/groups/{gid}/members — eventual consistency on membership.',
+    ],
+    lifecycle:
+      'Active → Expired (at exemption_request.requested_expires_at) or Revoked (when approver rescinds). Linked exemption_request transitions to Expired in lockstep.',
+  },
+  User: {
+    description: 'User opt-out or opt-in. Always scoped to user_id; almost always time-bounded.',
+    orgId: null, tenant: null, appId: null, groupId: null, userId: 99887,
+    check: 'chk_level_scope — user_id is set',
+    scope: 'PerUser',
+    scopeWriter: 'policy:write:user (the user themselves)',
+    scopeReader: 'policy:read (self)',
+    exampleValue: 'Disabled',
+    rejections: [
+      { scenario: 'Resolved stage not in opt_out_eligible_values',                       code: '422', tone: 'warning' },
+      { scenario: 'User role not affected at current stage (nothing to opt out of)',     code: '422', tone: 'warning' },
+      { scenario: 'Definition has opt_out_allowed = false',                              code: '403', tone: 'danger' },
+      { scenario: 'expires_at > 180 days (self-service maximum)',                        code: '422', tone: 'warning' },
+      { scenario: 'user_id from token does not match path :userId',                      code: '403', tone: 'danger' },
+      { scenario: 'Rate limit exceeded (10 req/min per user)',                           code: '429', tone: 'info' },
+    ],
+    overriddenBy: [
+      { label: 'Operator', tone: 'warning', detail: 'Platform Ops can revoke a user\'s row or override it with an emergency exception.' },
+    ],
+    overrides: [
+      { label: 'Group',    detail: 'For this user only, User supersedes the group setting when opt-out is permitted.' },
+      { label: 'App',      detail: 'By transitivity.' },
+      { label: 'Tenant',   detail: 'By transitivity.' },
+      { label: 'Org',      detail: 'By transitivity.' },
+      { label: 'Platform', detail: 'By transitivity.' },
+    ],
+    exception: {
+      available: true,
+      summary:
+        'Platform Ops can grant an emergency User opt-out that bypasses opt_out_eligible_values and applicable_roles checks (e.g. regulator-mandated exception, accessibility accommodation). Mandatory ticket_ref and expires_at — never permanent.',
       sample: `POST /admin/exceptions
 Authorization: Bearer <ops-token policy:admin>
 
 {
   "policyKey":   "policy.mfa.enforcement_stage",
-  "targetLevel": "L3",
+  "targetLevel": "User",
   "userId":      99887,
   "value":       "Disabled",
   "reason":      "Accessibility accommodation per ticket",
@@ -707,7 +904,7 @@ Authorization: Bearer <ops-token policy:admin>
     concurrency: [
       'Per-user rate-limited to 10 req/min on /me/policies/* endpoints.',
       'Idempotent: repeated POST /me/policies/{key}/opt-out returns the existing Active row.',
-      'Background job re-evaluates the L3 row at expires_at and emits PolicyInstanceExpired.',
+      'Background job re-evaluates the User row at expires_at and emits PolicyInstanceExpired.',
     ],
     lifecycle:
       'Active → Expired (background job at expires_at) or Revoked (user DELETE or operator revocation). Always emits audit events including the originating actor.',
@@ -715,7 +912,7 @@ Authorization: Bearer <ops-token policy:admin>
 };
 
 function InstanceBrowser() {
-  const [level, setLevel] = useCanvasState<Level>('pdm.level', 'L1');
+  const [level, setLevel] = useCanvasState<Level>('pdm.level.v2', 'Tenant');
   const info = LEVEL_INFO[level];
 
   const sample = buildSampleInstance(level, info);
@@ -725,7 +922,7 @@ function InstanceBrowser() {
       <CardHeader>policy_instances — write surface by level</CardHeader>
       <CardBody>
         <Row gap={8} wrap>
-          {(['L0', 'L1', 'L2', 'L3'] as Level[]).map((l) => (
+          {ALL_LEVELS.map((l) => (
             <Pill key={l} active={level === l} onClick={() => setLevel(l)}>
               {l}
             </Pill>
@@ -743,7 +940,13 @@ function InstanceBrowser() {
 
             <Stack gap={4}>
               <Text size="small" tone="secondary">Scope columns populated</Text>
-              <ScopeIndicator tenant={info.tenant} appId={info.appId} userId={info.userId} />
+              <ScopeIndicator
+                orgId={info.orgId}
+                tenant={info.tenant}
+                appId={info.appId}
+                groupId={info.groupId}
+                userId={info.userId}
+              />
             </Stack>
 
             <Stack gap={4}>
@@ -876,16 +1079,19 @@ function rejectionClass(code: string): string {
 
 function OverrideStack({ selected, hasException }: { selected: Level; hasException: boolean }) {
   const theme = useHostTheme();
-  const W = 380;
-  const H = 200;
+  const W = 400;
+  const H = 270;
   const levels: { id: Level; label: string; sub: string }[] = [
-    { id: 'L0', label: 'L0 — Platform default', sub: 'Platform Ops' },
-    { id: 'L1', label: 'L1 — Tenant override',  sub: 'Tenant Admin' },
-    { id: 'L2', label: 'L2 — App override',     sub: 'Service account / code' },
-    { id: 'L3', label: 'L3 — User opt-out',     sub: 'End user' },
+    { id: 'Platform', label: 'Platform — Global default', sub: 'Platform Ops' },
+    { id: 'Org',      label: 'Org — Franchise / parent',  sub: 'Org Admin' },
+    { id: 'Tenant',   label: 'Tenant — Per-tenant',       sub: 'Tenant Admin' },
+    { id: 'App',      label: 'App — Per-(app, tenant)',   sub: 'Service account / code' },
+    { id: 'Group',    label: 'Group — Per-group',         sub: 'Approver / Tenant Admin' },
+    { id: 'User',     label: 'User — Individual',         sub: 'End user' },
   ];
-  const rowH = 36;
-  const rowY = (i: number) => 14 + i * (rowH + 6);
+  const rowH = 32;
+  const rowGap = 6;
+  const rowY = (i: number) => 10 + i * (rowH + rowGap);
   const rowX = 14;
   const rowW = 240;
 
@@ -909,17 +1115,17 @@ function OverrideStack({ selected, hasException }: { selected: Level; hasExcepti
           x1={rowX + rowW + 12}
           y1={rowY(0) + rowH / 2}
           x2={rowX + rowW + 12}
-          y2={rowY(3) + rowH / 2}
+          y2={rowY(5) + rowH / 2}
           stroke={theme.text.quaternary}
           strokeWidth={1}
           strokeDasharray="3 3"
         />
         <text
           x={rowX + rowW + 18}
-          y={(rowY(0) + rowH / 2 + rowY(3) + rowH / 2) / 2}
+          y={(rowY(0) + rowH / 2 + rowY(5) + rowH / 2) / 2}
           fontSize={10}
           fill={theme.text.tertiary}
-          transform={`rotate(90 ${rowX + rowW + 18},${(rowY(0) + rowH / 2 + rowY(3) + rowH / 2) / 2})`}
+          transform={`rotate(90 ${rowX + rowW + 18},${(rowY(0) + rowH / 2 + rowY(5) + rowH / 2) / 2})`}
           textAnchor="middle"
         >
           resolution: most specific wins
@@ -943,14 +1149,14 @@ function OverrideStack({ selected, hasException }: { selected: Level; hasExcepti
               />
               <text
                 x={rowX + 12}
-                y={y + 15}
-                fontSize={12}
+                y={y + 13}
+                fontSize={11}
                 fontWeight={590}
                 fill={isSelected ? theme.text.primary : theme.text.secondary}
               >
                 {l.label}
               </text>
-              <text x={rowX + 12} y={y + 29} fontSize={10} fill={theme.text.tertiary}>
+              <text x={rowX + 12} y={y + 26} fontSize={10} fill={theme.text.tertiary}>
                 {l.sub}
               </text>
             </g>
@@ -1025,12 +1231,16 @@ function ExceptionPathPanel({ exception }: { exception: LevelEntry['exception'] 
 }
 
 function ScopeIndicator({
+  orgId,
   tenant,
   appId,
+  groupId,
   userId,
 }: {
+  orgId: number | null;
   tenant: string | null;
   appId: string | null;
+  groupId: string | null;
   userId: number | null;
 }) {
   const theme = useHostTheme();
@@ -1051,39 +1261,54 @@ function ScopeIndicator({
         <Text size="small" tone={isSet ? 'primary' : 'tertiary'} weight={isSet ? 'semibold' : 'normal'}>
           {name}
         </Text>
-        <Text size="small" tone={isSet ? 'secondary' : 'quaternary'}>
+        <Text size="small" tone={isSet ? 'secondary' : 'quaternary'} truncate>
           {isSet ? String(value) : 'NULL'}
         </Text>
       </div>
     );
   };
   return (
-    <Row gap={8}>
+    <Row gap={8} wrap>
+      {item('org_id',    orgId)}
       {item('tenant_id', tenant)}
-      {item('app_id', appId)}
-      {item('user_id', userId)}
+      {item('app_id',    appId)}
+      {item('group_id',  groupId)}
+      {item('user_id',   userId)}
     </Row>
   );
 }
 
 function buildSampleInstance(level: Level, info: LevelEntry) {
-  const id = level === 'L0' ? '0a0a-...'
-    : level === 'L1' ? '3f2a-...'
-    : level === 'L2' ? '7c4b-...'
-    : '9e8d-...';
+  const id =
+      level === 'Platform' ? '0a0a-...'
+    : level === 'Org'      ? '1b1b-...'
+    : level === 'Tenant'   ? '3f2a-...'
+    : level === 'App'      ? '7c4b-...'
+    : level === 'Group'    ? '8d5e-...'
+    :                        '9e8d-...';
+  const createdBy =
+      level === 'User'     ? 'user:99887'
+    : level === 'Platform' ? 'system-seed'
+    : level === 'Group'    ? 'security@example.com'
+    :                        'admin@acme.com';
+  const expires = level === 'User' || level === 'Group' ? '"2026-09-01T00:00:00Z"' : 'null';
   return `{
-  "id":                   "${id}",
-  "policy_definition_id": "9b1f-policy.mfa.enforcement_stage-v1",
-  "definition_version":   1,
-  "level":                "${level}",
-  "tenant_id":            ${info.tenant === null ? 'null' : info.tenant},
-  "app_id":               ${info.appId === null ? 'null' : `"${info.appId}"`},
-  "user_id":              ${info.userId === null ? 'null' : info.userId},
-  "value":                "${info.exampleValue}",
-  "effective_at":         "2026-06-01T00:00:00Z",
-  "expires_at":           ${level === 'L3' ? '"2026-09-01T00:00:00Z"' : 'null'},
-  "status":               "Active",
-  "created_by":           "${level === 'L3' ? 'user:99887' : level === 'L0' ? 'system-seed' : 'admin@acme.com'}"
+  "id":                     "${id}",
+  "policy_definition_id":   "9b1f-policy.mfa.enforcement_stage-v1",
+  "definition_version":     1,
+  "level":                  "${level}",
+  "org_id":                 ${info.orgId    === null ? 'null' : info.orgId},
+  "tenant_id":              ${info.tenant   === null ? 'null' : info.tenant},
+  "app_id":                 ${info.appId    === null ? 'null' : `"${info.appId}"`},
+  "group_id":               ${info.groupId  === null ? 'null' : `"${info.groupId}"`},
+  "user_id":                ${info.userId   === null ? 'null' : info.userId},
+  "value":                  "${info.exampleValue}",
+  "applies_to_roles":       ${level === 'Tenant' ? '["admin","manager"]' : 'null'},
+  "applies_to_environments": ${level === 'Tenant' ? '["Monolith","EnterpriseHub"]' : 'null'},
+  "effective_at":           "2026-06-01T00:00:00Z",
+  "expires_at":             ${expires},
+  "status":                 "Active",
+  "created_by":             "${createdBy}"
 }`;
 }
 
@@ -1206,41 +1431,91 @@ function ApiSurface() {
       title: 'Policy Definitions',
       scope: 'policy:read / policy:definitions:write',
       rows: [
-        ['GET',  '/definitions',                       'List active definitions'],
-        ['GET',  '/definitions/{key}',                 'Active definition for a key'],
-        ['GET',  '/definitions/{key}/versions',        'Full version history (admin)'],
-        ['POST', '/definitions',                       'Register definition or new version'],
-        ['PUT',  '/definitions/{key}',                 'Non-breaking update'],
+        ['GET',  '/definitions',                          'List active definitions'],
+        ['GET',  '/definitions/{key}',                    'Active definition for a key'],
+        ['GET',  '/definitions/{key}/dependencies',       'Resolved deps for UI (ADR-009)'],
+        ['GET',  '/definitions/{key}/versions',           'Full version history (admin)'],
+        ['POST', '/definitions',                          'Register definition or new version'],
+        ['PUT',  '/definitions/{key}',                    'Non-breaking update'],
       ],
     },
     {
-      title: 'Tenant Instances (L1)',
-      scope: 'policy:read / policy:write:l1',
+      title: 'Org Instances',
+      scope: 'policy:read / policy:write:org',
       rows: [
-        ['GET',    '/tenants/{tenantId}/policies',               'All L1 overrides for a tenant'],
-        ['GET',    '/tenants/{tenantId}/policies/{key}',         'Single L1 instance'],
-        ['PUT',    '/tenants/{tenantId}/policies/{key}',         'Create or replace L1 override'],
-        ['DELETE', '/tenants/{tenantId}/policies/{key}',         'Revert to L0 default'],
+        ['GET',    '/orgs/{orgId}/policies',              'All Org overrides (ADR-008)'],
+        ['PUT',    '/orgs/{orgId}/policies/{key}',        'Create or replace Org override'],
+        ['DELETE', '/orgs/{orgId}/policies/{key}',        'Revert to Platform default'],
+      ],
+    },
+    {
+      title: 'Tenant Instances',
+      scope: 'policy:read / policy:write:tenant',
+      rows: [
+        ['GET',    '/tenants/{tenantId}/policies',               'All Tenant overrides'],
+        ['GET',    '/tenants/{tenantId}/policies/{key}',         'Single Tenant instance'],
+        ['PUT',    '/tenants/{tenantId}/policies/{key}',         'Create or replace; ?status=Draft for ADR-010 drafts'],
+        ['DELETE', '/tenants/{tenantId}/policies/{key}',         'Revert to Org/Platform'],
         ['GET',    '/tenants/{tenantId}/policies/{key}/history', 'Paginated history'],
       ],
     },
     {
-      title: 'Application Instances (L2)',
-      scope: 'policy:read / policy:write:l2',
+      title: 'Application Instances',
+      scope: 'policy:read / policy:write:app',
       rows: [
-        ['GET',    '/apps/{appId}/tenants/{tenantId}/policies',         'L2 overrides for an app+tenant'],
-        ['PUT',    '/apps/{appId}/tenants/{tenantId}/policies/{key}',   'Create or replace L2 override'],
-        ['DELETE', '/apps/{appId}/tenants/{tenantId}/policies/{key}',   'Remove L2 DB override'],
+        ['GET',    '/apps/{appId}/tenants/{tenantId}/policies',         'App overrides for an app+tenant'],
+        ['PUT',    '/apps/{appId}/tenants/{tenantId}/policies/{key}',   'Create or replace App override'],
+        ['DELETE', '/apps/{appId}/tenants/{tenantId}/policies/{key}',   'Remove App DB override'],
       ],
     },
     {
-      title: 'User Instances (L3)',
-      scope: 'policy:write:l3',
+      title: 'Group Instances + Group Management',
+      scope: 'policy:read / policy:write:group / policy:groups:manage',
       rows: [
-        ['GET',    '/me/policies',                           'All L3 instances for current user'],
+        ['GET',    '/tenants/{tenantId}/groups',                                        'List groups (ADR-008)'],
+        ['POST',   '/tenants/{tenantId}/groups',                                        'Create a group'],
+        ['GET',    '/tenants/{tenantId}/groups/{groupId}/members',                      'List members'],
+        ['POST',   '/tenants/{tenantId}/groups/{groupId}/members',                      'Add member(s)'],
+        ['DELETE', '/tenants/{tenantId}/groups/{groupId}/members/{userId}',             'Remove member'],
+        ['GET',    '/tenants/{tenantId}/groups/{groupId}/policies',                     'Group-scoped instances'],
+        ['PUT',    '/tenants/{tenantId}/groups/{groupId}/policies/{key}',               'Set Group override'],
+        ['DELETE', '/tenants/{tenantId}/groups/{groupId}/policies/{key}',               'Remove Group override'],
+      ],
+    },
+    {
+      title: 'User Instances',
+      scope: 'policy:write:user',
+      rows: [
+        ['GET',    '/me/policies',                           'All User instances for current user'],
         ['POST',   '/me/policies/{key}/opt-out',             'Submit opt-out (subject to eligibility)'],
         ['DELETE', '/me/policies/{key}/opt-out',             'Cancel opt-out'],
-        ['POST',   '/me/policies/{key}/opt-in',              'Voluntary tightening above L2'],
+        ['POST',   '/me/policies/{key}/opt-in',              'Voluntary tightening above App'],
+      ],
+    },
+    {
+      title: 'Plans & Drafts',
+      scope: 'policy:plan:manage',
+      rows: [
+        ['POST',   '/policies/{instance_id}/activate', 'Draft → Active (ADR-010)'],
+        ['POST',   '/plans',                           'Create a plan'],
+        ['POST',   '/plans/{id}/items',                'Add Draft instance to plan'],
+        ['POST',   '/plans/{id}/dry-run',              'Preview resolved values before activation'],
+        ['POST',   '/plans/{id}/activate',             'Atomic activation of all items'],
+        ['DELETE', '/plans/{id}',                      'Discard'],
+      ],
+    },
+    {
+      title: 'Exemption Requests',
+      scope: 'policy:request:exemption / policy:approve:exemption',
+      rows: [
+        ['POST',   '/exemption-requests',               'Submit request (ADR-010)'],
+        ['GET',    '/me/exemption-requests',            'List mine'],
+        ['GET',    '/tenants/{tid}/exemption-requests', 'Approver inbox (tenant scope)'],
+        ['GET',    '/orgs/{oid}/exemption-requests',    'Approver inbox (org scope)'],
+        ['POST',   '/exemption-requests/{id}/claim',    'Approver claim'],
+        ['POST',   '/exemption-requests/{id}/approve', 'Approve (materializes Group/User instance)'],
+        ['POST',   '/exemption-requests/{id}/deny',     'Deny with reason'],
+        ['DELETE', '/exemption-requests/{id}',          'Withdraw'],
       ],
     },
     {
@@ -1250,6 +1525,15 @@ function ApiSurface() {
         ['POST', '/evaluate',           'Resolve effective value for a context'],
         ['POST', '/evaluate/batch',     'Resolve many policies in one round-trip'],
         ['POST', '/sdk/instances/bulk', 'SDK warm-up: instances for (app, tenants, keys)'],
+      ],
+    },
+    {
+      title: 'Catalogs (read-only)',
+      scope: 'policy:read',
+      rows: [
+        ['GET', '/factors',   'MFA factor catalog (ADR-009)'],
+        ['GET', '/providers', 'Auth provider catalog'],
+        ['GET', '/actions',   'Step-up action catalog'],
       ],
     },
     {
@@ -1300,20 +1584,400 @@ function methodColor(method: string, theme: HostTheme): string {
 
 // ─── Indexes ─────────────────────────────────────────────────────────────────
 
+// ─── Targeting filters ───────────────────────────────────────────────────────
+
+function TargetingFiltersTable() {
+  return (
+    <Table
+      headers={['Filter', 'Column', 'Example value', 'Semantics']}
+      columnAlign={['left', 'left', 'left', 'left']}
+      rows={[
+        [
+          <Text weight="semibold">Roles</Text>,
+          <Code>applies_to_roles</Code>,
+          <Code>["admin","manager"]</Code>,
+          <Text size="small">Instance only matches when <Code>context.roles ∩ applies_to_roles ≠ ∅</Code>. Null = any role.</Text>,
+        ],
+        [
+          <Text weight="semibold">Environment</Text>,
+          <Code>applies_to_environments</Code>,
+          <Code>["Monolith","EnterpriseHub"]</Code>,
+          <Text size="small">Matches by <Code>context.environment</Code>. Used for "force Enterprise Hub" / "block Next".</Text>,
+        ],
+        [
+          <Text weight="semibold">Actions</Text>,
+          <Code>applies_to_actions</Code>,
+          <Code>["payroll.approve_run"]</Code>,
+          <Text size="small">Step-up MFA per action. Matches by <Code>context.action</Code>.</Text>,
+        ],
+        [
+          <Text weight="semibold">User type (deprecated)</Text>,
+          <Code>applies_to_user_types</Code>,
+          <Code>["Employee","Technician"]</Code>,
+          <Text size="small" tone="tertiary">Transition compatibility; migrating to <Code>applies_to_roles</Code> per ADR-008 §7.</Text>,
+        ],
+      ]}
+    />
+  );
+}
+
+// ─── Lifecycle state machine ─────────────────────────────────────────────────
+
+function LifecycleStateMachine() {
+  const theme = useHostTheme();
+  const W = 880;
+  const H = 200;
+
+  type Node = { id: string; x: number; y: number; w: number; h: number; label: string; tone: 'neutral' | 'accent' | 'success' | 'danger' };
+  const nodes: Node[] = [
+    { id: 'draft',    x:  30, y:  80, w: 130, h: 50, label: 'Draft',           tone: 'neutral' },
+    { id: 'pending',  x: 210, y:  80, w: 170, h: 50, label: 'PendingApproval', tone: 'accent' },
+    { id: 'active',   x: 430, y:  80, w: 130, h: 50, label: 'Active',          tone: 'success' },
+    { id: 'expired',  x: 620, y:  20, w: 130, h: 50, label: 'Expired',         tone: 'neutral' },
+    { id: 'revoked',  x: 620, y: 140, w: 130, h: 50, label: 'Revoked',         tone: 'danger' },
+  ];
+
+  type Edge = { from: string; to: string; label: string; dashed?: boolean };
+  const edges: Edge[] = [
+    { from: 'draft',   to: 'pending', label: 'submit (requires_approval=true)' },
+    { from: 'draft',   to: 'active',  label: 'activate' },
+    { from: 'draft',   to: 'revoked', label: 'discard', dashed: true },
+    { from: 'pending', to: 'active',  label: 'approve' },
+    { from: 'pending', to: 'revoked', label: 'deny' },
+    { from: 'active',  to: 'expired', label: 'expires_at reached', dashed: true },
+    { from: 'active',  to: 'revoked', label: 'supersede / DELETE' },
+  ];
+
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n] as const));
+
+  function side(n: Node) {
+    return {
+      cx: n.x + n.w / 2,
+      cy: n.y + n.h / 2,
+      left:   { x: n.x,           y: n.y + n.h / 2 },
+      right:  { x: n.x + n.w,     y: n.y + n.h / 2 },
+      top:    { x: n.x + n.w / 2, y: n.y },
+      bottom: { x: n.x + n.w / 2, y: n.y + n.h },
+    };
+  }
+
+  function anchor(from: Node, to: Node) {
+    const a = side(from), b = side(to);
+    const dx = b.cx - a.cx;
+    const dy = b.cy - a.cy;
+    if (Math.abs(dy) > Math.abs(dx)) {
+      return dy > 0 ? { p1: a.bottom, p2: b.top } : { p1: a.top, p2: b.bottom };
+    }
+    return dx > 0 ? { p1: a.right, p2: b.left } : { p1: a.left, p2: b.right };
+  }
+
+  const toneFill = (t: Node['tone']) =>
+    t === 'success' ? 'rgba(63,162,102,0.18)'
+    : t === 'danger' ? 'rgba(192,72,72,0.18)'
+    : t === 'accent' ? theme.fill.tertiary
+    : theme.bg.elevated;
+  const toneStroke = (t: Node['tone']) =>
+    t === 'success' ? '#3fa266'
+    : t === 'danger' ? '#c04848'
+    : t === 'accent' ? theme.accent.primary
+    : theme.stroke.primary;
+
+  return (
+    <div style={{ overflowX: 'auto', border: `1px solid ${theme.stroke.secondary}`, borderRadius: 8, background: theme.bg.editor }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Instance lifecycle state machine">
+        <defs>
+          <marker id="lm-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={theme.text.tertiary} />
+          </marker>
+        </defs>
+
+        {edges.map((e, i) => {
+          const { p1, p2 } = anchor(byId[e.from], byId[e.to]);
+          const mx = (p1.x + p2.x) / 2;
+          const my = (p1.y + p2.y) / 2;
+          return (
+            <g key={i}>
+              <line
+                x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                stroke={theme.text.tertiary}
+                strokeWidth={1.3}
+                strokeDasharray={e.dashed ? '4 3' : undefined}
+                markerEnd="url(#lm-arrow)"
+              />
+              <text x={mx} y={my - 6} fontSize={10} fill={theme.text.secondary} textAnchor="middle">
+                {e.label}
+              </text>
+            </g>
+          );
+        })}
+
+        {nodes.map((n) => (
+          <g key={n.id}>
+            <rect
+              x={n.x} y={n.y} width={n.w} height={n.h}
+              rx={6} ry={6}
+              fill={toneFill(n.tone)}
+              stroke={toneStroke(n.tone)}
+              strokeWidth={1.4}
+            />
+            <text x={n.x + n.w / 2} y={n.y + n.h / 2 + 4} fontSize={13} fontWeight={590} textAnchor="middle" fill={theme.text.primary}>
+              {n.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ─── Exemption state machine ─────────────────────────────────────────────────
+
+function ExemptionStateMachine() {
+  const theme = useHostTheme();
+  const W = 880;
+  const H = 220;
+
+  type Node = { id: string; x: number; y: number; w: number; h: number; label: string; tone: 'neutral' | 'accent' | 'success' | 'danger' };
+  const nodes: Node[] = [
+    { id: 'submitted',  x:  30, y:  90, w: 140, h: 48, label: 'Submitted',   tone: 'neutral' },
+    { id: 'under',      x: 220, y:  90, w: 170, h: 48, label: 'UnderReview', tone: 'accent' },
+    { id: 'approved',   x: 450, y:  20, w: 150, h: 48, label: 'Approved',    tone: 'success' },
+    { id: 'denied',     x: 450, y: 160, w: 150, h: 48, label: 'Denied',      tone: 'danger' },
+    { id: 'withdrawn',  x: 220, y: 170, w: 140, h: 40, label: 'Withdrawn',   tone: 'danger' },
+    { id: 'expired',    x: 670, y:  20, w: 130, h: 48, label: 'Expired',     tone: 'neutral' },
+  ];
+
+  type Edge = { from: string; to: string; label: string; dashed?: boolean };
+  const edges: Edge[] = [
+    { from: 'submitted', to: 'under',     label: 'approver claims' },
+    { from: 'submitted', to: 'withdrawn', label: 'requester withdraws', dashed: true },
+    { from: 'under',     to: 'approved',  label: 'approve → creates instance' },
+    { from: 'under',     to: 'denied',    label: 'deny' },
+    { from: 'under',     to: 'withdrawn', label: 'withdraw', dashed: true },
+    { from: 'approved',  to: 'expired',   label: 'instance expires', dashed: true },
+  ];
+
+  const byId = Object.fromEntries(nodes.map((n) => [n.id, n] as const));
+
+  function side(n: Node) {
+    return {
+      cx: n.x + n.w / 2, cy: n.y + n.h / 2,
+      left:   { x: n.x,           y: n.y + n.h / 2 },
+      right:  { x: n.x + n.w,     y: n.y + n.h / 2 },
+      top:    { x: n.x + n.w / 2, y: n.y },
+      bottom: { x: n.x + n.w / 2, y: n.y + n.h },
+    };
+  }
+  function anchor(from: Node, to: Node) {
+    const a = side(from), b = side(to);
+    const dx = b.cx - a.cx; const dy = b.cy - a.cy;
+    if (Math.abs(dy) > Math.abs(dx)) return dy > 0 ? { p1: a.bottom, p2: b.top } : { p1: a.top, p2: b.bottom };
+    return dx > 0 ? { p1: a.right, p2: b.left } : { p1: a.left, p2: b.right };
+  }
+  const toneFill = (t: Node['tone']) =>
+    t === 'success' ? 'rgba(63,162,102,0.18)'
+    : t === 'danger' ? 'rgba(192,72,72,0.18)'
+    : t === 'accent' ? theme.fill.tertiary
+    : theme.bg.elevated;
+  const toneStroke = (t: Node['tone']) =>
+    t === 'success' ? '#3fa266'
+    : t === 'danger' ? '#c04848'
+    : t === 'accent' ? theme.accent.primary
+    : theme.stroke.primary;
+
+  return (
+    <div style={{ overflowX: 'auto', border: `1px solid ${theme.stroke.secondary}`, borderRadius: 8, background: theme.bg.editor }}>
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Exemption request state machine">
+        <defs>
+          <marker id="em-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={theme.text.tertiary} />
+          </marker>
+        </defs>
+        {edges.map((e, i) => {
+          const { p1, p2 } = anchor(byId[e.from], byId[e.to]);
+          const mx = (p1.x + p2.x) / 2;
+          const my = (p1.y + p2.y) / 2;
+          return (
+            <g key={i}>
+              <line
+                x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+                stroke={theme.text.tertiary}
+                strokeWidth={1.3}
+                strokeDasharray={e.dashed ? '4 3' : undefined}
+                markerEnd="url(#em-arrow)"
+              />
+              <text x={mx} y={my - 6} fontSize={10} fill={theme.text.secondary} textAnchor="middle">
+                {e.label}
+              </text>
+            </g>
+          );
+        })}
+        {nodes.map((n) => (
+          <g key={n.id}>
+            <rect
+              x={n.x} y={n.y} width={n.w} height={n.h}
+              rx={6} ry={6}
+              fill={toneFill(n.tone)}
+              stroke={toneStroke(n.tone)}
+              strokeWidth={1.4}
+            />
+            <text x={n.x + n.w / 2} y={n.y + n.h / 2 + 4} fontSize={12} fontWeight={590} textAnchor="middle" fill={theme.text.primary}>
+              {n.label}
+            </text>
+          </g>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+// ─── Catalog tables ──────────────────────────────────────────────────────────
+
+function CatalogTables() {
+  return (
+    <Grid columns={3} gap={16}>
+      <Card>
+        <CardHeader trailing={<Pill size="sm" tone="info">platform-managed</Pill>}>
+          mfa_factor
+        </CardHeader>
+        <CardBody>
+          <Stack gap={6}>
+            <Text size="small" tone="secondary">Factor catalog used by required/allowed/disabled factor policies.</Text>
+            <Table
+              framed={false}
+              headers={['Column', 'Type']}
+              rows={[
+                ['id',         'TEXT PK'],
+                ['name',       'TEXT'],
+                ['family',     'TEXT (otp | phishing-resistant | fallback)'],
+                ['assurance',  'TEXT (low | medium | high)'],
+                ['is_active',  'BOOL'],
+              ]}
+            />
+            <Text size="small" tone="tertiary">
+              Seeded values: <Code>totp</Code>, <Code>sms</Code>, <Code>passkey</Code>,
+              <Text as="span"> </Text><Code>webauthn</Code>, <Code>email-otp</Code>.
+            </Text>
+          </Stack>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader trailing={<Pill size="sm" tone="info">platform-managed</Pill>}>
+          auth_provider
+        </CardHeader>
+        <CardBody>
+          <Stack gap={6}>
+            <Text size="small" tone="secondary">Provider catalog used by multi-provider SSO policies.</Text>
+            <Table
+              framed={false}
+              headers={['Column', 'Type']}
+              rows={[
+                ['id',        'TEXT PK'],
+                ['name',      'TEXT'],
+                ['kind',      'TEXT (oidc | saml | oauth | passkey | password)'],
+                ['is_active', 'BOOL'],
+                ['config',    'JSONB (non-secret metadata)'],
+              ]}
+            />
+            <Text size="small" tone="tertiary">
+              Seeded values: <Code>entra</Code>, <Code>google</Code>, <Code>okta</Code>,
+              <Text as="span"> </Text><Code>st-internal</Code>.
+            </Text>
+          </Stack>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader trailing={<Pill size="sm" tone="info">platform-managed</Pill>}>
+          policy_action
+        </CardHeader>
+        <CardBody>
+          <Stack gap={6}>
+            <Text size="small" tone="secondary">Action identifiers used for step-up MFA via <Code>context.action</Code>.</Text>
+            <Table
+              framed={false}
+              headers={['Column', 'Type']}
+              rows={[
+                ['id',       'TEXT PK'],
+                ['name',     'TEXT'],
+                ['category', 'TEXT (payroll | payment | admin | data-export | ...)'],
+              ]}
+            />
+            <Text size="small" tone="tertiary">
+              Examples: <Code>payroll.approve_run</Code>, <Code>payment.send_high_value</Code>,
+              <Text as="span"> </Text><Code>data.bulk_export</Code>.
+            </Text>
+          </Stack>
+        </CardBody>
+      </Card>
+    </Grid>
+  );
+}
+
+// ─── Dependency examples ─────────────────────────────────────────────────────
+
+function DependencyExamples() {
+  return (
+    <Table
+      headers={['Parent policy', 'When value =', 'Effect kind', 'Dependent policy', 'Effect']}
+      columnAlign={['left', 'left', 'left', 'left', 'left']}
+      rows={[
+        [
+          <Code>policy.auth.method</Code>,
+          <Code>SsoOnly</Code>,
+          <Pill tone="warning" size="sm" active>invalidates</Pill>,
+          <Code>policy.auth.account_linking</Code>,
+          <Text size="small">Account-linking control is greyed out in the admin UI; ignored at eval.</Text>,
+        ],
+        [
+          <Code>policy.password.rotation_enforced</Code>,
+          <Code>true</Code>,
+          <Pill tone="info" size="sm" active>requires</Pill>,
+          <Code>policy.password.rotation_interval</Code>,
+          <Text size="small">Save in admin UI is blocked until interval is set.</Text>,
+        ],
+        [
+          <Code>policy.mfa.enforcement_stage</Code>,
+          <Code>Disabled</Code>,
+          <Pill tone="warning" size="sm" active>invalidates</Pill>,
+          <Code>policy.mfa.required_factors</Code>,
+          <Text size="small">Required factors aren&rsquo;t evaluated when MFA itself is off.</Text>,
+        ],
+        [
+          <Code>policy.mfa.enforcement_stage</Code>,
+          <Code>Required</Code>,
+          <Pill tone="info" size="sm" active>requires</Pill>,
+          <Code>policy.mfa.allowed_factors</Code>,
+          <Text size="small">At least one allowed factor must be configured.</Text>,
+        ],
+      ]}
+    />
+  );
+}
+
 function IndexTable() {
   return (
     <Table
       headers={['Index', 'Table', 'Coverage', 'Type']}
       columnAlign={['left', 'left', 'left', 'left']}
       rows={[
-        ['idx_pd_active_key',     'policy_definitions', 'Active definition lookup by key',     'Partial (is_active)'],
-        ['idx_pd_key_version',    'policy_definitions', 'Version history queries',             'B-tree'],
-        ['idx_pi_l0_l1_lookup',   'policy_instances',   'SDK bulk fetch (L0 + L1 per tenant)', 'Partial (Active)'],
-        ['idx_pi_l2_lookup',      'policy_instances',   'L2 lookup by (app, tenant)',          'Partial (Active)'],
-        ['idx_pi_l3_lookup',      'policy_instances',   'L3 lookup by user',                   'Partial (Active)'],
-        ['idx_pi_expiry_scan',    'policy_instances',   'Background expiry job',               'Partial (Active + expires_at)'],
-        ['idx_pi_tenant_history', 'policy_instances',   'Tenant audit / admin UI history',     'B-tree'],
-        ['idx_pi_user_history',   'policy_instances',   'User opt-out history',                'B-tree'],
+        ['idx_pd_active_key',         'policy_definitions',     'Active definition lookup by key',           'Partial (is_active)'],
+        ['idx_pd_key_version',        'policy_definitions',     'Version history queries',                   'B-tree'],
+        ['idx_pi_platform_lookup',    'policy_instances',       'SDK bulk fetch (Platform defaults)',        'Partial (Active + Platform)'],
+        ['idx_pi_org_lookup',         'policy_instances',       'Org-level lookup (ADR-008)',                'Partial (Active + Org)'],
+        ['idx_pi_tenant_lookup',      'policy_instances',       'Tenant lookup',                             'Partial (Active + Tenant)'],
+        ['idx_pi_app_lookup',         'policy_instances',       'App lookup by (app, tenant)',               'Partial (Active + App)'],
+        ['idx_pi_group_lookup',       'policy_instances',       'Group lookup by (tenant, group) (ADR-008)', 'Partial (Active + Group)'],
+        ['idx_pi_user_lookup',        'policy_instances',       'User lookup',                               'Partial (Active + User)'],
+        ['idx_pi_expiry_scan',        'policy_instances',       'Background expiry job',                     'Partial (Active + expires_at)'],
+        ['idx_pi_draft_by_creator',   'policy_instances',       'Drafts inbox (ADR-010)',                    'Partial (Draft)'],
+        ['idx_pi_pending_approval',   'policy_instances',       'Approver queue (ADR-010)',                  'Partial (PendingApproval)'],
+        ['idx_pi_tenant_history',     'policy_instances',       'Tenant audit / admin UI history',           'B-tree'],
+        ['idx_pi_user_history',       'policy_instances',       'User opt-out history',                      'B-tree'],
+        ['idx_exemption_open',        'exemption_request',      'Approver inbox (ADR-010)',                  'Partial (Submitted/UnderReview)'],
+        ['idx_exemption_target_user', 'exemption_request',      'User-scoped request lookup',                'Partial (user_id NOT NULL)'],
+        ['idx_dep_parent',            'policy_dependency',      'Find dependents when parent changes (ADR-009)', 'B-tree (parent_key, parent_version)'],
       ]}
     />
   );

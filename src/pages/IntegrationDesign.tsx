@@ -53,6 +53,30 @@ const USER_TYPES: { value: UserType; label: string }[] = [
   { value: 'Other',          label: 'Other user' },
 ];
 
+type Role = 'admin' | 'manager' | 'employee' | 'technician' | 'other';
+const ROLES: { value: Role; label: string }[] = [
+  { value: 'admin',      label: 'admin' },
+  { value: 'manager',    label: 'manager' },
+  { value: 'employee',   label: 'employee' },
+  { value: 'technician', label: 'technician' },
+  { value: 'other',      label: 'other' },
+];
+
+type Environment = 'Monolith' | 'EnterpriseHub' | 'Mobile' | 'AdminPortal';
+const ENVIRONMENTS: { value: Environment; label: string }[] = [
+  { value: 'Monolith',      label: 'Monolith (Go)' },
+  { value: 'EnterpriseHub', label: 'Enterprise Hub' },
+  { value: 'Mobile',        label: 'Mobile' },
+  { value: 'AdminPortal',   label: 'Admin Portal' },
+];
+
+type TenantRoleFilter = 'any' | 'admin' | 'employee';
+const TENANT_ROLE_FILTERS: { value: TenantRoleFilter; label: string }[] = [
+  { value: 'any',      label: 'any role' },
+  { value: 'admin',    label: 'admins only' },
+  { value: 'employee', label: 'employees only' },
+];
+
 const AFFECTED: Record<StageKey, UserType[]> = {
   Disabled:                [],
   EnabledAll:              [],
@@ -69,11 +93,48 @@ function affected(stage: StageKey, user: UserType): 'required' | 'optional' | 'n
   return AFFECTED[stage].includes(user) ? 'required' : 'none';
 }
 
-function resolveStage(l0: StageKey, l1: StageKey | '', l2: StageKey | '') {
-  let value: StageKey = l0;
-  let level: 'L0' | 'L1' | 'L2' = 'L0';
-  if (l1 && stageIdx(l1 as StageKey) > stageIdx(value)) { value = l1 as StageKey; level = 'L1'; }
-  if (l2 && stageIdx(l2 as StageKey) > stageIdx(value)) { value = l2 as StageKey; level = 'L2'; }
+type ResolvedLevel = 'Platform' | 'Org' | 'Tenant' | 'App' | 'Group';
+
+interface ResolveInput {
+  platform: StageKey;
+  org:      StageKey | '';
+  tenant:   StageKey | '';
+  tenantFilter: TenantRoleFilter;
+  app:      StageKey | '';
+  group:    StageKey | '';
+  inGroup:  boolean;
+  role:     Role;
+}
+
+function resolveStage(input: ResolveInput): { value: StageKey; level: ResolvedLevel } {
+  let value: StageKey = input.platform;
+  let level: ResolvedLevel = 'Platform';
+  // Org tightens Platform
+  if (input.org && stageIdx(input.org as StageKey) > stageIdx(value)) {
+    value = input.org as StageKey;
+    level = 'Org';
+  }
+  // Tenant tightens Org (subject to role filter)
+  if (input.tenant && stageIdx(input.tenant as StageKey) > stageIdx(value)) {
+    const matchesRole =
+      input.tenantFilter === 'any' ||
+      (input.tenantFilter === 'admin'    && input.role === 'admin') ||
+      (input.tenantFilter === 'employee' && input.role === 'employee');
+    if (matchesRole) {
+      value = input.tenant as StageKey;
+      level = 'Tenant';
+    }
+  }
+  // App tightens Tenant
+  if (input.app && stageIdx(input.app as StageKey) > stageIdx(value)) {
+    value = input.app as StageKey;
+    level = 'App';
+  }
+  // Group applies only when the user is in the group
+  if (input.group && input.inGroup && stageIdx(input.group as StageKey) > stageIdx(value)) {
+    value = input.group as StageKey;
+    level = 'Group';
+  }
   return { value, level };
 }
 
@@ -112,8 +173,9 @@ export default function IntegrationDesign() {
           Policy resolution simulator
         </SectionHeading>
         <Text tone="secondary">
-          Try the <Code>ium.mfa.enforcement_stage</Code> policy. Choose values at each level and a user
-          type to see which level wins, whether the user is required, and what audit event is emitted.
+          Try the <Code>policy.mfa.enforcement_stage</Code> policy. Pick values at each of the six levels
+          plus role/environment context. The right pane shows which level wins, the role-filter behavior,
+          whether the user is required, and the exact <Code>PolicyEvaluated</Code> audit event emitted.
         </Text>
         <Simulator />
       </Stack>
@@ -153,16 +215,18 @@ export default function IntegrationDesign() {
           Lifecycle of a tenant override
         </SectionHeading>
         <Text tone="secondary">
-          What happens when a tenant admin changes <Code>ium.mfa.enforcement_stage</Code> from
+          What happens when a tenant admin changes <Code>policy.mfa.enforcement_stage</Code> from
           <Text as="span"> </Text><Code>AdminsOnly</Code> to <Code>EmployeesOptOut</Code>.
         </Text>
         <OverrideLifecycle />
       </Stack>
 
       <Callout tone="info" title="Where this lives in code">
-        PolicyService → new <Code>policy-service</Code> repo. SDK → internal NuGet.
-        Frontend client + admin component → internal npm packages.
-        ADRs are alongside this site under <Code>docs/adr/</Code>.
+        PolicyService → new <Code>policy-service</Code> repo. SDK → internal NuGet
+        (<Code>PolicyFramework</Code>). Frontend client + admin component → internal npm packages
+        (<Code>policy-client</Code>, <Code>policy-panel</Code>). ADRs 001–010 are under
+        <Text as="span"> </Text><Code>docs/adr/</Code>. Critical PRD gaps are covered by
+        ADRs 008 (scope hierarchy), 009 (composition + side effects), and 010 (drafts + exemptions).
       </Callout>
     </Stack>
   );
@@ -175,8 +239,9 @@ function Header() {
     <Stack gap={6}>
       <H1>Policies — Integration Design</H1>
       <Text tone="secondary">
-        Centralized policy management with a four-level override hierarchy (L0 → L1 → L2 → L3),
-        event-driven cache invalidation, and a distributed audit pipeline.
+        Centralized policy management with a six-level hierarchy
+        (Platform → Org → Tenant → App → Group → User), role + environment + action
+        targeting, event-driven cache invalidation, and a distributed audit pipeline.
       </Text>
     </Stack>
   );
@@ -185,9 +250,9 @@ function Header() {
 function SummaryStats() {
   return (
     <Grid columns={4} gap={16}>
-      <Stat value="4" label="Override levels" />
+      <Stat value="6"  label="Scope levels" tone="info" />
       <Stat value="5+" label="Apps integrated via SDK" />
-      <Stat value="7" label="ADRs" />
+      <Stat value="10" label="ADRs" />
       <Stat value="~5s" label="Change propagation" tone="info" />
     </Grid>
   );
@@ -349,23 +414,34 @@ function ArchitectureDiagram() {
 // ─── Simulator ───────────────────────────────────────────────────────────────
 
 function Simulator() {
-  const [l0,       setL0]       = useCanvasState<StageKey>      ('sim.l0',       'Disabled');
-  const [l1,       setL1]       = useCanvasState<StageKey | ''> ('sim.l1',       'EmployeesOptOut');
-  const [l2,       setL2]       = useCanvasState<StageKey | ''> ('sim.l2',       '');
-  const [userType, setUserType] = useCanvasState<UserType>      ('sim.userType', 'Employee');
-  const [optedOut, setOptedOut] = useCanvasState<boolean>       ('sim.optedOut', false);
+  const [platform,     setPlatform]     = useCanvasState<StageKey>      ('sim.platform',     'Disabled');
+  const [org,          setOrg]          = useCanvasState<StageKey | ''> ('sim.org',          '');
+  const [tenant,       setTenant]       = useCanvasState<StageKey | ''> ('sim.tenant',       'EmployeesOptOut');
+  const [tenantFilter, setTenantFilter] = useCanvasState<TenantRoleFilter>('sim.tenantFilter','any');
+  const [app,          setApp]          = useCanvasState<StageKey | ''> ('sim.app',          '');
+  const [group,        setGroup]        = useCanvasState<StageKey | ''> ('sim.group',        '');
+  const [inGroup,      setInGroup]      = useCanvasState<boolean>       ('sim.inGroup',      false);
+  const [optedOut,     setOptedOut]     = useCanvasState<boolean>       ('sim.optedOut',     false);
+  const [userType,     setUserType]     = useCanvasState<UserType>      ('sim.userType',     'Employee');
+  const [role,         setRole]         = useCanvasState<Role>          ('sim.role',         'employee');
+  const [environment,  setEnvironment]  = useCanvasState<Environment>   ('sim.env',          'Monolith');
 
-  const resolved   = resolveStage(l0, l1, l2);
+  const resolved = resolveStage({
+    platform, org, tenant, tenantFilter, app, group, inGroup, role,
+  });
   const userStatus = affected(resolved.value, userType);
   const optOutAvailable = userStatus === 'required' && OPT_OUT_ELIGIBLE.includes(resolved.value);
   const effectiveStatus: 'required' | 'optional' | 'none' =
     optedOut && optOutAvailable ? 'none' : userStatus;
   const finalValue: StageKey = optedOut && optOutAvailable ? 'Disabled' : resolved.value;
-  const finalLevel = optedOut && optOutAvailable ? 'L3 (opt-out)' : resolved.level;
+  const finalLevel: string = optedOut && optOutAvailable ? 'User (opt-out)' : resolved.level;
 
   const stageOptions = STAGES.map((s) => ({ value: s.value, label: s.short }));
   const stageOptionsNullable = [{ value: '', label: 'None — inherit' }, ...stageOptions];
   const userOptions = USER_TYPES.map((u) => ({ value: u.value, label: u.label }));
+  const roleOptions = ROLES.map((r) => ({ value: r.value, label: r.label }));
+  const envOptions  = ENVIRONMENTS.map((e) => ({ value: e.value, label: e.label }));
+  const tenantFilterOptions = TENANT_ROLE_FILTERS.map((f) => ({ value: f.value, label: f.label }));
 
   const statusTone: 'success' | 'warning' | 'danger' | 'info' =
     effectiveStatus === 'required' ? 'warning'
@@ -376,33 +452,87 @@ function Simulator() {
     : effectiveStatus === 'optional' ? 'MFA is OPTIONAL for this user'
     : 'MFA is NOT REQUIRED for this user';
 
+  // Was the Tenant override skipped because of the role filter? Useful UX cue.
+  const tenantSkippedByRole =
+    tenant !== '' &&
+    stageIdx(tenant as StageKey) > stageIdx(platform) &&
+    !(tenantFilter === 'any' ||
+      (tenantFilter === 'admin' && role === 'admin') ||
+      (tenantFilter === 'employee' && role === 'employee'));
+
   return (
     <Card>
-      <CardHeader>ium.mfa.enforcement_stage</CardHeader>
+      <CardHeader>policy.mfa.enforcement_stage</CardHeader>
       <CardBody>
-        <Grid columns="minmax(0, 1fr) minmax(0, 1fr)" gap={24}>
+        <Grid columns="minmax(0, 1.1fr) minmax(0, 1fr)" gap={24}>
+          {/* ── Controls ─────────────────────────────────────────────────── */}
           <Stack gap={14}>
+            <Text size="small" tone="secondary" weight="semibold">Hierarchy (most general → most specific)</Text>
+
             <Stack gap={4}>
-              <Text size="small" tone="secondary">Platform default (L0)</Text>
-              <Select value={l0} onChange={(v) => setL0(v as StageKey)} options={stageOptions} />
+              <Text size="small" tone="secondary">Platform default</Text>
+              <Select value={platform} onChange={(v) => setPlatform(v as StageKey)} options={stageOptions} />
             </Stack>
+
             <Stack gap={4}>
-              <Text size="small" tone="secondary">Tenant override (L1)</Text>
-              <Select value={l1} onChange={(v) => setL1(v as StageKey | '')} options={stageOptionsNullable} />
+              <Text size="small" tone="secondary">Org override</Text>
+              <Select value={org} onChange={(v) => setOrg(v as StageKey | '')} options={stageOptionsNullable} />
             </Stack>
+
             <Stack gap={4}>
-              <Text size="small" tone="secondary">App floor (L2 — code or DB)</Text>
-              <Select value={l2} onChange={(v) => setL2(v as StageKey | '')} options={stageOptionsNullable} />
+              <Text size="small" tone="secondary">Tenant override</Text>
+              <Select value={tenant} onChange={(v) => setTenant(v as StageKey | '')} options={stageOptionsNullable} />
+              <Row align="center" gap={8}>
+                <Text size="small" tone="tertiary">applies_to_roles =</Text>
+                <Select
+                  value={tenantFilter}
+                  onChange={(v) => setTenantFilter(v as TenantRoleFilter)}
+                  options={tenantFilterOptions}
+                  style={{ width: 160 }}
+                />
+              </Row>
             </Stack>
+
             <Stack gap={4}>
-              <Text size="small" tone="secondary">Evaluating user type</Text>
-              <Select value={userType} onChange={(v) => setUserType(v as UserType)} options={userOptions} />
+              <Text size="small" tone="secondary">App floor (code or DB)</Text>
+              <Select value={app} onChange={(v) => setApp(v as StageKey | '')} options={stageOptionsNullable} />
             </Stack>
+
+            <Stack gap={4}>
+              <Text size="small" tone="secondary">Group exemption / floor</Text>
+              <Select value={group} onChange={(v) => setGroup(v as StageKey | '')} options={stageOptionsNullable} />
+              <Row align="center" gap={8}>
+                <Toggle checked={inGroup} onChange={setInGroup} />
+                <Text size="small" tone="tertiary">User is in target group</Text>
+              </Row>
+            </Stack>
+
             <Divider />
+
+            <Text size="small" tone="secondary" weight="semibold">Evaluation context</Text>
+
+            <Row gap={8} wrap>
+              <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                <Text size="small" tone="secondary">User type</Text>
+                <Select value={userType} onChange={(v) => setUserType(v as UserType)} options={userOptions} />
+              </Stack>
+              <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                <Text size="small" tone="secondary">Role</Text>
+                <Select value={role} onChange={(v) => setRole(v as Role)} options={roleOptions} />
+              </Stack>
+            </Row>
+
+            <Stack gap={4}>
+              <Text size="small" tone="secondary">Environment</Text>
+              <Select value={environment} onChange={(v) => setEnvironment(v as Environment)} options={envOptions} />
+            </Stack>
+
+            <Divider />
+
             <Row align="center" gap={12}>
               <Toggle checked={optedOut} onChange={setOptedOut} disabled={!optOutAvailable} />
               <Stack gap={2}>
-                <Text size="small" weight="semibold">User L3 opt-out</Text>
+                <Text size="small" weight="semibold">User opt-out</Text>
                 <Text size="small" tone="tertiary">
                   {optOutAvailable
                     ? 'Eligible at this resolved stage'
@@ -412,6 +542,7 @@ function Simulator() {
             </Row>
           </Stack>
 
+          {/* ── Result ───────────────────────────────────────────────────── */}
           <Stack gap={14}>
             <Stack gap={4}>
               <Text size="small" tone="secondary">Resolved stage</Text>
@@ -424,6 +555,13 @@ function Simulator() {
               </Text>
             </Stack>
 
+            {tenantSkippedByRole && (
+              <Stack gap={2}>
+                <Text size="small" tone="secondary">Note</Text>
+                <Pill tone="warning" size="sm">Tenant override skipped — role filter didn&rsquo;t match</Pill>
+              </Stack>
+            )}
+
             <Stack gap={4}>
               <Text size="small" tone="secondary">Effect on this user</Text>
               <Pill tone={statusTone} active>{statusLabel}</Pill>
@@ -434,14 +572,20 @@ function Simulator() {
               <pre style={{ margin: 0, fontSize: 11.5, lineHeight: '17px', whiteSpace: 'pre-wrap' }}>
 {`{
   "eventType":     "PolicyEvaluated",
-  "policyKey":     "ium.mfa.enforcement_stage",
+  "policyKey":     "policy.mfa.enforcement_stage",
   "resolvedValue": "${finalValue}",
   "resolvedLevel": "${finalLevel}",
-  "tenantId":      12345,
-  "appId":         "mfa-service",
-  "userId":        99887,
-  "userType":      "${userType}",
-  "cacheHit":      true
+  "context": {
+    "orgId":       ${org ? '42' : 'null'},
+    "tenantId":    12345,
+    "appId":       "mfa-service",
+    "userId":      99887,
+    "userType":    "${userType}",
+    "roles":       ["${role}"],
+    "environment": "${environment}",
+    "inGroup":     ${inGroup}
+  },
+  "cacheHit": true
 }`}
               </pre>
             </Stack>
@@ -460,10 +604,12 @@ function HierarchyTable() {
       headers={['Level', 'Owner', 'Where it lives', 'Can do', 'Example']}
       columnAlign={['left', 'left', 'left', 'left', 'left']}
       rows={[
-        ['L0', 'Platform Ops',  'PolicyService (Postgres)',           'Set platform-wide default and ceiling',          'Platform default = AdminsOnly'],
-        ['L1', 'Tenant Admin',  'PolicyService (Postgres, per-tenant)', 'Tighten within L0 ceiling',                    'Tenant ACME → EmployeesOptOut'],
-        ['L2', 'Application',   'Code-registered or PolicyService DB','Tighten further for this app',                  'mfa-service floor = AdminsAndPrivileged'],
-        ['L3', 'User / Operator','PolicyService (per user, expiring)', 'Opt-out (when allowed) or emergency exception', 'User opt-out for 90 days'],
+        ['Platform', 'Platform Ops',  'PolicyService (Postgres) — seeded via Flyway', 'Set platform-wide default and ceiling',                      'Platform default = AdminsOnly'],
+        ['Org',      'Org Admin',     'PolicyService (per-org)',                       'Tighten across all tenants in a franchise',                  'NorthRegion org → AdminsAndPrivileged'],
+        ['Tenant',   'Tenant Admin',  'PolicyService (per-tenant)',                    'Tighten within Org / Platform ceiling',                      'Tenant ACME → EmployeesOptOut'],
+        ['App',      'Application',   'Code-registered or PolicyService DB',           'Tighten further for this app; code floors win over DB',      'mfa-service floor = AdminsAndPrivileged'],
+        ['Group',    'Tenant Admin / Approver', 'PolicyService (per-group, expiring)', 'Grant group-scoped exemption (via approved request)',        'Sales team exemption from MFA stage 5 for 90 days'],
+        ['User',     'User / Operator', 'PolicyService (per-user, expiring)',          'Opt-out (when allowed) or emergency operator exception',     'User opt-out for 90 days'],
       ]}
     />
   );
@@ -514,13 +660,13 @@ function OverrideLifecycle() {
 
   const steps: { actor: string; tone: 'info' | 'neutral' | 'success'; title: string; detail: ReactNode }[] = [
     { actor: 'Tenant Admin', tone: 'info', title: 'Submit override via MFE',
-      detail: <Text size="small">Picks a new stage in the embedded <Code>policy-panel</Code>, clicks Save.</Text> },
+      detail: <Text size="small">Picks a new stage in the embedded <Code>policy-panel</Code>. May save as Draft first, then activate (ADR-010).</Text> },
     { actor: 'PolicyService', tone: 'neutral', title: 'Validate + persist',
-      detail: <Text size="small">Checks the new value against L0 bounds, atomically revokes old L1 row, inserts new <Code>PolicyInstance</Code>.</Text> },
+      detail: <Text size="small">Checks against Platform/Org bounds and definition flags (<Code>tenant_allowed</Code>, <Code>relaxation_allowed_at</Code>), atomically revokes prior Tenant row, inserts the new <Code>PolicyInstance</Code> at level <Code>Tenant</Code>.</Text> },
     { actor: 'PolicyService', tone: 'neutral', title: 'Publish change event',
       detail: <Text size="small">Emits <Code>PolicyInstanceChanged</Code> to ServiceBus topic <Code>policy-changes</Code> with routing key <Code>(tenantId=12345, policyKey=...)</Code>.</Text> },
     { actor: 'SDK', tone: 'neutral', title: 'Invalidate caches across apps',
-      detail: <Text size="small">All app SDKs subscribed for this (tenant, policy) receive the event and evict their local cache entry.</Text> },
+      detail: <Text size="small">All app SDKs subscribed for this <Code>(tenant, policy)</Code> receive the event and evict their local cache entry. Any registered <Code>IPolicyChangeHandler</Code> also runs (ADR-009 side effects).</Text> },
     { actor: 'Audit Sink', tone: 'neutral', title: 'Index audit record',
       detail: <Text size="small">Consumes the same event from a separate subscription, enriches with tenant name, bulk-indexes to <Code>policy-changes-YYYY.MM</Code>.</Text> },
     { actor: 'Dashboard', tone: 'success', title: 'New state visible',
