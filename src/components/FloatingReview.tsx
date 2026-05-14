@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { reviewCountFor } from '@/data/reviewCounts';
 
 /**
  * Floating "Leave a review" widget backed by giscus (GitHub Discussions).
@@ -123,18 +124,36 @@ export function ReviewProvider({ children }: { children: ReactNode }) {
 }
 
 function FloatingButton({ onClick }: { onClick: () => void }) {
+  const [pageTerm, setPageTerm] = useState(() => currentPageTerm());
+
+  useEffect(() => {
+    const onHashChange = () => setPageTerm(currentPageTerm());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const count = reviewCountFor(pageTerm);
   return (
     <button
       type="button"
       className="floating-review-btn"
       onClick={onClick}
       aria-label="Leave a review on this page"
-      title="Leave a review on this page"
+      title={count > 0 ? `${count} review${count === 1 ? '' : 's'} on this page` : 'Leave a review on this page'}
     >
       <ChatIcon />
       <span>Leave a review</span>
+      {count > 0 && <CountBadge n={count} variant="on-accent" />}
     </button>
   );
+}
+
+function currentPageTerm(): string {
+  if (typeof window === 'undefined') return 'home:general';
+  const route = window.location.hash;
+  if (route === '#/integration') return 'integration:general';
+  if (route === '#/data-model')  return 'data-model:general';
+  return 'home:general';
 }
 
 /** Inline section-scoped review trigger; placed next to section headings. */
@@ -148,17 +167,27 @@ export function ReviewButton({
   subtitle?: string;
 }) {
   const { open } = useReview();
+  const count = reviewCountFor(term);
   return (
     <button
       type="button"
       className="review-section-btn"
       onClick={() => open({ term, title, subtitle })}
-      aria-label={`Review: ${title}`}
-      title={`Review: ${title}`}
+      aria-label={count > 0 ? `${count} review${count === 1 ? '' : 's'} on ${title}` : `Review: ${title}`}
+      title={count > 0 ? `${count} review${count === 1 ? '' : 's'} on ${title}` : `Review: ${title}`}
     >
       <ChatIcon size={12} />
       <span>Review</span>
+      {count > 0 && <CountBadge n={count} variant="inline" />}
     </button>
+  );
+}
+
+function CountBadge({ n, variant }: { n: number; variant: 'inline' | 'on-accent' }) {
+  return (
+    <span className={`review-count-badge review-count-badge--${variant}`} aria-hidden>
+      {n > 99 ? '99+' : n}
+    </span>
   );
 }
 

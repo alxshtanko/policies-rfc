@@ -4,11 +4,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Refresh review counts daily so the bundled badge numbers stay current
+  # even when there are no code changes.
+  schedule:
+    - cron: '17 6 * * *'
 
 permissions:
   contents: read
   pages: write
   id-token: write
+  discussions: read
 
 concurrency:
   group: pages
@@ -27,6 +32,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Fetch review counts
+        env:
+          GITHUB_TOKEN:       ${{ secrets.GITHUB_TOKEN }}
+          GISCUS_REPO_OWNER:  ${{ github.repository_owner }}
+          GISCUS_REPO_NAME:   ${{ github.event.repository.name }}
+          GISCUS_CATEGORY_ID: ${{ vars.GISCUS_CATEGORY_ID || 'DIC_kwDOSc3lIM4C8_r1' }}
+          GISCUS_TERM_PREFIX: ${{ vars.GISCUS_TERM_PREFIX || 'policy-review' }}
+        run: npm run fetch-counts
 
       - name: Build
         env:

@@ -284,3 +284,31 @@ pre {
   font-size: 11px;
   padding: 1px 4px;
 }
+
+/* Count badge — small pill showing review count on review buttons */
+.review-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+/* Inline variant — sits inside the small "Review" pill next to H2 */
+.review-count-badge--inline {
+  background: var(--accent);
+  color: var(--accent-text);
+  margin-left: 2px;
+}
+
+/* On-accent variant — sits inside the bottom-right floating button */
+.review-count-badge--on-accent {
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--accent-text);
+  margin-left: 2px;
+}
